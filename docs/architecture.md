@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart TD
-    Source[HTML / JSON / API / browser / leaflet] --> Adapter[StoreAdapter]
+    Source[HTML / JSON / API / browser / leaflet] --> Adapter[AcquisitionAdapter / StoreAdapter]
     Adapter --> Item[AcquisitionItem: canonical candidate + source evidence]
     Item --> Snapshot[Content-addressed snapshot store]
     Item --> Validate[Pydantic validation]
@@ -21,7 +21,8 @@ resolves identity through a protocol, and persists through a repository protocol
 implements SQLAlchemy and file snapshots. `cli/` composes the services. No retailer branching exists
 outside adapters. Analytics and optimization are deliberately deferred rather than empty frameworks.
 
-Adapters use the injected `httpx.AsyncClient`; browser and HTML dependencies are optional. Acquisition
+Adapters use the injected `httpx.AsyncClient`; browser dependencies are optional. HTML parsing is
+included for the Kupi source. Acquisition
 is async and streamed. SQLite transactions are synchronous and short (one accepted/rejected item).
 This is suitable for a single daily local job, but SQL calls block the loop briefly. A future async
 repository can replace this implementation when measured throughput or concurrency requires it.
@@ -43,6 +44,12 @@ Exact GTIN resolves identity but not semantic comparability or an authoritative 
 Canonical catalog descriptions use first-seen facts for now; store descriptions remain separately
 available. GTINs are validated and padded to 14 digits, preserving leading zeros.
 
+Acquisition source identity is separate from the selling retailer. `AcquisitionAdapter.source_id`
+identifies the run; `StoreProduct.store_id` identifies the seller. `StoreAdapter` is the convenient
+single-retailer specialization. Aggregators such as Kupi implement the common base and supply an
+identity-boundary validator. Acquisition-derived product/group IDs stay in their own SKU namespace;
+they do not establish cross-store identity. See [Kupi mapping](kupi.md) for the first aggregator.
+
 An offer is identified by `(store_id, sku, offer_key, scope)`. Standard/loyalty/coupon offers can
 coexist. The adapter assigns opaque keys; downstream components interpret typed selling terms.
 `scope` must represent a real location/channel limitation; it is not a claim of universal coverage.
@@ -52,6 +59,9 @@ total contents of one sale item (e.g. 6 x 500 ml = 3000 ml); price basis could b
 Variable-weight goods require a mass price basis. Derived unit prices normalize g to kg and ml to l;
 unknown contents remain priced per piece/package. Conditional unit prices retain promotion conditions;
 an optimizer must check minimum purchase, loyalty and other conditions before using them.
+Promotion percentages specify their comparison reference. `unspecified` means a preserved source
+claim, not calculated regular-price savings. `advertised` can represent an advertised promotion
+without a known baseline. `price_cut` still requires a lower current price and positive regular price.
 
 Money uses Decimal strings at ingestion and four decimal places; floats, negatives, nonfinite values,
 and excess precision are rejected. SQL stores ten-thousandths in signed 64-bit integers, so SQLite
@@ -68,11 +78,17 @@ times are timezone-aware and stored in UTC. No midnight or timezone is guessed b
 | offers | Deterministic UUID, SKU FK, unique `(store_product_id, offer_key, scope)` |
 | price_observations | UUID, offer FK, state fingerprint, exact price columns, complete canonical JSON, first/last seen |
 | source_snapshots | UUID, run FK, hash/path metadata, URL, locator, fetch timestamp, raw metadata JSON |
-| scrape_runs | UUID, store, started/finished timestamps, status, fetched/accepted/rejected/changed/errors counters |
+| scrape_runs | UUID, acquisition source, started/finished timestamps, status, fetched/accepted/rejected/changed/errors counters |
 | scrape_items | UUID, run FK, snapshot FK, nullable observation FK, status and diagnostic details |
 
 Raw bytes are content-addressed SHA-256 files outside SQL. Each fetched item retains a separate
 provenance row, even if the content or business state is unchanged. Backups must include both stores.
+
+The Python/JSON run field is `source_id`. Its SQL column retains the original name `store_id` for
+compatibility with existing SQLite databases; SQLAlchemy maps that column explicitly. Retailer
+identity in `store_products.store_id` is unchanged. Old promotion JSON without `discount_reference`
+continues to mean `regular_price` through the schema default. Re-ingestion materializes that field
+and may record one schema-related state change; no history is rewritten.
 
 Only consecutive identical canonical offer states collapse into an existing observation; `last_seen`
 advances and a scrape item records the new evidence. A -> B -> A produces three historical states.
@@ -90,7 +106,8 @@ not migration management: introduce Alembic before changing a deployed schema.
 
 ## Failures and monitoring
 
-JSON events include run/store identifiers, errors and final counts. Persistent run records allow a
+JSON events include run/source identifiers, errors and final counts. Retailer identity is retained
+on each canonical observation. Persistent run records allow a
 later supervisor to compare counts over time. Parser and validation errors are item-level rejections.
 HTTP/stream/storage failures are run errors; already committed items survive. Empty runs are flagged
 and return a failing CLI exit code. Missing items never imply deletion or unavailability automatically.

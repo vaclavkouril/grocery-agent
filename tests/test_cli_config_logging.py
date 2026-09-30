@@ -7,6 +7,8 @@ import pytest
 from grocery_agent.cli.main import main
 from grocery_agent.config import Settings
 from grocery_agent.logging import JSONFormatter
+from grocery_agent.stores.mock.adapter import MockStore
+from grocery_agent.stores.registry import StoreRegistry
 
 
 @pytest.fixture(autouse=True)
@@ -17,7 +19,7 @@ def preserve_pytest_logging(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_store_listing(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["stores"]) == 0
-    assert capsys.readouterr().out.strip() == "mock"
+    assert capsys.readouterr().out.strip() == "kupi\nmock"
 
 
 @pytest.mark.parametrize(
@@ -42,6 +44,9 @@ def test_cli_mock_scrape_and_history(
     assert main(["scrape", "mock"]) == 0
     first = json.loads(capsys.readouterr().out)
     assert first["accepted"] == 5 and first["changed"] == 5
+    registry = StoreRegistry()
+    registry.register("mock", MockStore)
+    monkeypatch.setattr("grocery_agent.cli.main.default_registry", lambda: registry)
     assert main(["scrape", "--all"]) == 0
     second = json.loads(capsys.readouterr().out)
     assert second["accepted"] == 5 and second["changed"] == 0

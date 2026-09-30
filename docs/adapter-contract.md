@@ -1,14 +1,24 @@
 # Store adapter contract
 
 ```python
-class StoreAdapter(ABC):
+class AcquisitionAdapter(ABC):
     @property
     @abstractmethod
-    def store_id(self) -> str: ...
+    def source_id(self) -> str: ...
+
+    @abstractmethod
+    def validate_offer(self, offer: Offer) -> None: ...
 
     @abstractmethod
     def fetch_offers(self, context: AdapterContext) -> AsyncIterator[AcquisitionItem]: ...
 ```
+
+`StoreAdapter` extends this base for a single retailer: implement `store_id`, and it supplies
+`source_id = store_id` plus the check that each candidate belongs to that retailer.
+Aggregators implement the base directly: `source_id` identifies acquisition, while each candidate's
+`product.store_id` identifies its advertised retailer. `validate_offer` raises `ValueError` when
+source identity, key namespace, or scope is inconsistent. The pipeline always runs Pydantic
+validation first, then this source boundary check. It has no source/retailer-specific branches.
 
 The method is implemented as `async def` containing `yield`. `AdapterContext` provides an already
 configured `httpx.AsyncClient`. The caller owns this client's lifetime. A browser adapter should
@@ -17,7 +27,9 @@ when needed. Store-specific configuration can be injected into the registered ad
 
 ## Required behavior
 
-1. Use a stable lowercase slug for `store_id`, and return the same ID in every candidate's product.
+1. Use a stable lowercase slug for `source_id` and each retailer's `store_id`. Single-retailer sources
+   return the same retailer in every candidate. Aggregators preserve the advertised retailer and
+   namespace source-generated SKUs so they cannot collide with direct retailer identifiers.
 2. Fetch and yield incrementally. Iterate pages/records; do not accumulate the entire catalog.
    MockStore's tiny JSON array is an example, not a catalog-scale loading strategy.
 3. Each `AcquisitionItem` contains exactly one canonical candidate mapping or parser error plus
@@ -35,6 +47,10 @@ when needed. Store-specific configuration can be injected into the registered ad
 8. Convert source promotions into canonical types/conditions. `minimum_purchase` counts multiples
    of the price basis; `current_price` is the per-basis conditional price, not bundle checkout total.
    If a promotion cannot be represented safely, emit a parser error with retained evidence.
+   Use `advertised` for an advertised promotion lacking a known price cut. A source percentage
+   with an unknown comparison basis uses `discount_reference = unspecified`; never invent a regular
+   price. The default reference is `regular_price` and retains strict consistency checks.
+   A `price_cut` always requires an actual lower price and a positive regular price.
 9. Validate that GTINs identify reusable products before supplying them. Weight/transaction EAN
    codes must not be used for global identity. Missing/ambiguous facts stay unknown.
 10. Retain exact source bytes, media type, URL, fetched time, and a record locator (JSON path, CSS
@@ -82,4 +98,3 @@ create provenance links. Counts and errors are durable and also emitted as JSON 
 An absent item is not evidence of unavailability. Emit `unavailable` only when the source says so.
 No automatic expiration/deletion is performed. Validity dates are inclusive and do not on their own
 prove stock availability; downstream consumers must check both date validity and availability.
-

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.27,<2"]
+requires = ["hatchling>=1.27,<2", "editables>=0.5,<1"]
 build-backend = "hatchling.build"
 
 [project]
@@ -9,6 +9,8 @@ description = "Modular Czech grocery offer acquisition and price history"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+  "beautifulsoup4>=4.13,<5",
+  "lxml>=6,<7",
   "httpx>=0.28,<1",
   "pydantic>=2.12,<3",
   "pydantic-settings>=2.10,<3",
@@ -16,7 +18,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-html = ["beautifulsoup4>=4.13,<5", "lxml>=6,<7"]
 browser = ["playwright>=1.55,<2"]
 postgres = ["psycopg[binary]>=3.2,<4"]
 dev = ["pytest>=8.4,<10", "pytest-asyncio>=1.2,<2", "ruff>=0.14,<1", "mypy>=1.18,<2"]
@@ -45,4 +46,3 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-ra --strict-markers -m 'not live'"
 markers = ["live: optional tests requiring retailer/network access"]
-

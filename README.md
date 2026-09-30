@@ -2,7 +2,8 @@
 
 A modular foundation for collecting Czech grocery offers and keeping auditable price history.
 Retailer adapters emit one canonical schema; validation, persistence, matching, and future analytics
-operate without retailer-specific branches. The initial implementation includes an offline MockStore.
+operate without retailer-specific branches. Includes an offline MockStore and a Kupi adapter
+collecting advertised offers from multiple retailers.
 
 See [architecture](docs/architecture.md) and the [adapter contract](docs/adapter-contract.md).
 
@@ -18,11 +19,12 @@ python -m pip install --no-deps --no-build-isolation -e .
 cp .env.example .env
 grocery-agent stores
 grocery-agent scrape mock
+grocery-agent scrape kupi
 grocery-agent scrape --all
 grocery-agent runs --limit 10
 ```
 
-HTML parsing (`.[html]`), browser automation (`.[browser]`), and PostgreSQL (`.[postgres]`)
+HTML parsing is included for Kupi. Browser automation (`.[browser]`) and PostgreSQL (`.[postgres]`)
 are optional extras. Install them when an adapter or deployment needs them.
 The committed development lock pins the tested tooling and dependencies. For a runtime-only
 installation, use `python -m pip install .` instead.
@@ -42,8 +44,13 @@ Run commands from the repository root. Runtime data, environments and caches are
 
 ## Scope
 
-This is the acquisition foundation. Real retailer adapters, fuzzy matching, analytics, shopping
-optimization, agents, and scheduling will be added after a design review. No real scraper is registered.
+This is the acquisition foundation with one real acquisition source. Kupi scrapes the public
+fruit-and-vegetable promotions category across retailers, retaining displayed locality and loyalty
+conditions. It does not collect full retailer inventories or establish exact cross-store identity.
+See [Kupi mapping, configuration and verification](docs/kupi.md).
+
+Direct retailer adapters, fuzzy matching, analytics, shopping optimization, agents, and scheduling
+remain future work. `--all` runs both registered sources, including the offline mock.
 
 ## Adding a retailer
 
@@ -52,6 +59,10 @@ optimization, agents, and scheduling will be added after a design review. No rea
 3. Emit canonical candidate fields and source evidence; keep raw retailer fields in the evidence.
 4. Register the factory in `stores/registry.py`.
 5. Add saved fixtures, parser tests, and a case in `tests/test_adapter_contract.py`.
+
+For an aggregator representing several retailers, implement `AcquisitionAdapter` with a `source_id`
+and `validate_offer(offer)` identity check. Candidates still carry the actual retailer in
+`product.store_id`. Single-retailer `StoreAdapter` supplies this check automatically.
 
 Persistence and downstream services need no changes. See the detailed contract before implementing
 an adapter, especially price basis, promotion variants, provenance, and item-level failures.

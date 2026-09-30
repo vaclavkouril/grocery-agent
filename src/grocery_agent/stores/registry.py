@@ -29,8 +29,10 @@ class StoreRegistry:
 
 
 def default_registry() -> StoreRegistry:
+    from grocery_agent.stores.kupi.adapter import KupiAdapter
     from grocery_agent.stores.mock.adapter import MockStore
 
     registry = StoreRegistry()
     registry.register("mock", MockStore)
+    registry.register("kupi", KupiAdapter)
     return registry

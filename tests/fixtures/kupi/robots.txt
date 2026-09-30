@@ -1,0 +1,169 @@
+User-agent: Mediapartners-Google
+Allow: /
+
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: Ezooms
+Disallow: /
+
+User-agent: Riddler
+Disallow: /
+
+User-agent: *
+Disallow: /welcome
+Disallow: /404
+Disallow: /login
+Disallow: /popup/*
+Disallow: /logging
+Disallow: /get-locality-by-gps
+Disallow: /nakupni-listek
+Disallow: /get-mesto
+Disallow: /get-slevy
+Disallow: /get-letaky
+Disallow: /get-akce
+Disallow: /get-znacky
+Disallow: /hlidani
+Disallow: /uzivatel
+Disallow: /oblibene
+Disallow: /oblibene-kategorie
+Disallow: /set-oblibene-letaky
+Disallow: /send
+Disallow: /kupici
+Disallow: /objednavka
+Disallow: /redir/*
+Disallow: /nakup/*
+Disallow: /mailing
+Disallow: /redir.php
+Disallow: /tipy
+Disallow: /letak2/*
+Disallow: /letak-dots/*
+Disallow: /mailing/unsubscribe/*
+Disallow: /magazin/pr-clanky
+Disallow: /magazin/clanek-nahled/*
+Disallow: /uzivatel/autorizace
+Disallow: /prihlasit/facebook
+Disallow: /oauth/*
+Disallow: /odhlasit-se
+Disallow: /prihlasit/facebook/overeni
+Disallow: /prihlasit/facebook/potvrzeni-uctu
+Disallow: /letak/nahled/*
+Disallow: /letak/standalone/*
+Disallow: /magazin-beta/*
+Disallow: /magazin/api/*
+Disallow: /recepty/recept-nahled/*
+Disallow: /magazin/ajax/search
+Disallow: /dlclick2.php
+Disallow: /recepty/recept/diskuze/*
+Disallow: /recepty/ajax/seznam/anchor
+Disallow: /recepty/ajax/cmp/settings
+Disallow: /recepty/ajax/recipes
+Disallow: /recepty/s/*
+Disallow: /magazin/hledej?*
+Disallow: /recepty/hledej?*
+# spam block
+Disallow: /hledej?f=*website
+# razeni vypisu
+Disallow: /*?ord=
+# strankovani v hledani
+Disallow: /hledej?*page=
+# nasobna filtrace znacek a obchodu
+Disallow: /*br*=*&br*=
+Disallow: /*sh*=*&sh*=
+# proces autorizace uzivatele
+Disallow: /*kr-reg=
+
+# kupony
+Disallow: /kupony/*kategorie=*&*
+Disallow: /kupony/*&kategorie=*
+Disallow: /kupony/*obchod=*&*
+Disallow: /kupony/*&obchod=*
+Disallow: /kupony/*obchod=*,*
+Disallow: /kupony/*typ=*&*
+Disallow: /kupony/*&typ=*
+Disallow: /kupony/*slevy=*&*
+Disallow: /kupony/*&slevy=*
+Disallow: /kupony/*vyse-slevy=*&*
+Disallow: /kupony/*&vyse-slevy=*
+Disallow: /kupony/*vyse-slevy-kc=*&*
+Disallow: /kupony/*&vyse-slevy-kc=*"
+Disallow: /kupony/?*page=*
+Disallow: /kupony/?*razeni=*
+Disallow: /kupony/?*&*
+Disallow: /kupony/*typ-kuponu=*&*
+Disallow: /kupony/*&typ-kuponu=*
+Disallow: /kupon/odchod/
+
+User-agent: SeznamBot
+Disallow: /welcome
+Disallow: /404
+Disallow: /login
+Disallow: /popup/*
+Disallow: /logging
+Disallow: /get-locality-by-gps
+Disallow: /nakupni-listek
+Disallow: /get-mesto
+Disallow: /get-slevy
+Disallow: /get-letaky
+Disallow: /get-akce
+Disallow: /get-znacky
+Disallow: /hlidani
+Disallow: /uzivatel
+Disallow: /oblibene
+Disallow: /oblibene-kategorie
+Disallow: /set-oblibene-letaky
+Disallow: /send
+Disallow: /kupici
+Disallow: /objednavka
+Disallow: /redir/*
+Disallow: /nakup/*
+Disallow: /mailing
+Disallow: /redir.php
+Disallow: /tipy
+Disallow: /letak2/*
+Disallow: /letak-dots/*
+Disallow: /mailing/unsubscribe/*
+Disallow: /magazin/pr-clanky
+Disallow: /magazin/clanek-nahled/*
+Disallow: /uzivatel/autorizace
+Disallow: /prihlasit/facebook
+Disallow: /oauth/*
+Disallow: /odhlasit-se
+Disallow: /prihlasit/facebook/overeni
+Disallow: /prihlasit/facebook/potvrzeni-uctu
+Disallow: /letak/nahled/*
+Disallow: /letak/standalone/*
+Disallow: /magazin-beta/*
+Disallow: /magazin/diskuze/*
+Disallow: /magazin/api/*
+Disallow: /recepty/recept-nahled/*
+Disallow: /magazin/ajax/search
+Disallow: /dlclick2.php
+Disallow: /recepty/recept/diskuze/*
+Disallow: /recepty/ajax/seznam/anchor
+Disallow: /recepty/ajax/cmp/settings
+Disallow: /recepty/ajax/recipes
+Disallow: /recepty/s/*
+Disallow: /magazin/hledej?*
+Disallow: /recepty/hledej?*
+
+# spam block
+Disallow: /hledej?f=*website
+# razeni vypisu
+Disallow: /*?ord=
+# strankovani v hledani
+Disallow: /hledej?*page=
+# nasobna filtrace znacek a obchodu
+Disallow: /*br*=*&br*=
+Disallow: /*sh*=*&sh*=
+# proces autorizace uzivatele
+Disallow: /*kr-reg=
+
+
+User-agent: AI
+Disallow: /
+
+Sitemap: https://www.kupi.cz/sitemaps/sitemap.xml
+Sitemap: https://www.kupi.cz/magazin/sitemap/sitemap.xml
+Sitemap: https://www.kupi.cz/recepty/sitemap/sitemap.xml
+Sitemap: https://www.kupi.cz/kupony/sitemap/sitemap.xml

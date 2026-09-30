@@ -6,21 +6,29 @@ from pathlib import Path
 import httpx
 import pytest
 
-from grocery_agent.stores.base import AdapterContext, StoreAdapter
+from grocery_agent.stores.base import AcquisitionAdapter, AdapterContext
 from grocery_agent.stores.mock.adapter import MockStore
 from grocery_agent.stores.mock.parser import parse_offers
 from grocery_agent.stores.registry import StoreRegistry, default_registry
 from tests.adapter_contract import assert_adapter_contract
+from tests.kupi_support import FETCHED_AT, fixture_response
+from tests.kupi_support import adapter as kupi_adapter
 
-CONTRACT_CASES: dict[str, tuple[Callable[[], StoreAdapter], int]] = {"mock": (MockStore, 5)}
+CONTRACT_CASES: dict[str, tuple[Callable[[], AcquisitionAdapter], int]] = {
+    "mock": (MockStore, 5),
+    "kupi": (kupi_adapter, 90),
+}
 
 
 @pytest.mark.parametrize("store_id", sorted(CONTRACT_CASES))
-async def test_adapter_contract(store_id: str) -> None:
+async def test_adapter_contract(store_id: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("grocery_agent.stores.kupi.adapter.utc_now", lambda: FETCHED_AT)
+
     def unexpected_http(request: httpx.Request) -> httpx.Response:
         raise AssertionError(f"unexpected HTTP call: {request.url}")
 
-    async with httpx.AsyncClient(transport=httpx.MockTransport(unexpected_http)) as client:
+    transport = fixture_response if store_id == "kupi" else unexpected_http
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
         factory, count = CONTRACT_CASES[store_id]
         await assert_adapter_contract(factory, AdapterContext(client), expected_count=count)
 
