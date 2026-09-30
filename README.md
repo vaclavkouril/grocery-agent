@@ -13,7 +13,8 @@ Python 3.13+ is required. From this repository:
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[dev]'
+python -m pip install -r requirements-dev.lock
+python -m pip install --no-deps --no-build-isolation -e .
 cp .env.example .env
 grocery-agent stores
 grocery-agent scrape mock
@@ -23,6 +24,8 @@ grocery-agent runs --limit 10
 
 HTML parsing (`.[html]`), browser automation (`.[browser]`), and PostgreSQL (`.[postgres]`)
 are optional extras. Install them when an adapter or deployment needs them.
+The committed development lock pins the tested tooling and dependencies. For a runtime-only
+installation, use `python -m pip install .` instead.
 
 ## Development
 
@@ -35,6 +38,7 @@ pytest
 
 Tests use saved fixtures and temporary databases; normal tests never need live retailers.
 CI runs the same checks on Python 3.13 and 3.14.
+Run commands from the repository root. Runtime data, environments and caches are ignored by Git.
 
 ## Scope
 
@@ -63,6 +67,9 @@ Back up the database and snapshot directory together. JSON logs go to stderr; CL
 stdout. Scrapes with rejected records, operational errors, or zero offers exit nonzero. `runs` shows
 persisted counts and start/end times. Zero results are flagged for review, without declaring products
 unavailable or deleting previous history.
+Abrupt process termination can leave a run marked `running`; its already committed items survive.
+Cancellation handled by the process marks the run `cancelled`. Automatic stale-run recovery and
+snapshot retention are deferred until deployment requirements are known.
 
 ## GitHub and license
 
@@ -75,4 +82,3 @@ git push -u origin main
 
 MIT is the suggested license: it is simple and permissive. No license grant has been selected yet;
 see [license decision](docs/license.md) before publishing as open source.
-

@@ -1,0 +1,35 @@
+[
+  {
+    "id": "milk-1", "title": "Mléko polotučné 1 l", "brand": "Ukázková mlékárna",
+    "category": "Mléčné výrobky", "ean": "8594000000006",
+    "size": {"value": "1", "unit": "l"},
+    "price": "19.90", "was": "24.90", "basis": {"value": "1", "unit": "piece"},
+    "promo": {"kind": "price_cut", "label": "Týdenní akce", "advertised_discount_percent": "20"},
+    "starts": "2026-09-28", "ends": "2026-10-04", "available": true,
+    "supplier_note": "An example of source-only metadata"
+  },
+  {
+    "id": "milk-1", "title": "Mléko polotučné 1 l", "brand": "Ukázková mlékárna",
+    "category": "Mléčné výrobky", "ean": "8594000000006",
+    "size": {"value": "1", "unit": "l"},
+    "variant": "loyalty", "price": "17.90", "was": "24.90",
+    "basis": {"value": "1", "unit": "piece"},
+    "promo": {"kind": "loyalty", "requires_loyalty": true, "label": "S kartou"},
+    "starts": "2026-09-28", "ends": "2026-10-04", "available": true
+  },
+  {
+    "id": "chicken-1", "title": "Kuřecí prsní řízky chlazené", "category": "Maso",
+    "variable": true, "price": "129.90", "was": "159.90",
+    "basis": {"value": "1", "unit": "kg"},
+    "promo": {"kind": "price_cut", "label": "Akce"}, "available": true
+  },
+  {
+    "id": "rice-1", "title": "Rýže 500 g", "size": {"value": "500", "unit": "g"},
+    "price": "32.90", "basis": {"value": "1", "unit": "package"}, "available": true
+  },
+  {
+    "id": "roll-1", "title": "Rohlík", "price": "2.90",
+    "basis": {"value": "1", "unit": "piece"}, "available": null
+  }
+]
+
