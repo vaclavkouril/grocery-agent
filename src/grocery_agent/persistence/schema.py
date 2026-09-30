@@ -67,7 +67,8 @@ class OfferRow(Base):
 class ScrapeRunRow(Base):
     __tablename__ = "scrape_runs"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    store_id: Mapped[str] = mapped_column(String(64), index=True)
+    # Retain the original physical column for existing SQLite databases.
+    source_id: Mapped[str] = mapped_column("store_id", String(64), index=True)
     started_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
     finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     status: Mapped[str] = mapped_column(String(24))

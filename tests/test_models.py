@@ -95,6 +95,58 @@ def test_exact_money_and_derived_discount(candidate: dict[str, Any]) -> None:
     assert offer.product.gtin == "08594000000006"
 
 
+def test_advertised_discount_with_unknown_baseline(candidate: dict[str, Any]) -> None:
+    candidate.update(
+        regular_price=None,
+        promotion={
+            "kind": "advertised",
+            "advertised_discount_percent": "44",
+            "discount_reference": "unspecified",
+        },
+    )
+    offer = Offer.model_validate(candidate)
+    assert offer.regular_price is None and offer.discount_percent is None
+    assert offer.promotion.advertised_discount_percent == 44
+
+
+@pytest.mark.parametrize("claim", ["-1", "101", 44.0])
+def test_unspecified_discount_still_validates_claim(candidate: dict[str, Any], claim: Any) -> None:
+    candidate.update(
+        regular_price=None,
+        promotion={
+            "kind": "advertised",
+            "advertised_discount_percent": claim,
+            "discount_reference": "unspecified",
+        },
+    )
+    with pytest.raises(ValidationError):
+        Offer.model_validate(candidate)
+
+
+def test_discount_reference_does_not_bypass_price_cut_validation(candidate: dict[str, Any]) -> None:
+    candidate.update(
+        regular_price=None,
+        promotion={
+            "kind": "price_cut",
+            "advertised_discount_percent": "44",
+            "discount_reference": "unspecified",
+        },
+    )
+    with pytest.raises(ValidationError, match="positive regular price"):
+        Offer.model_validate(candidate)
+
+
+def test_unspecified_claim_is_not_compared_to_regular_price(candidate: dict[str, Any]) -> None:
+    candidate["promotion"] = {
+        "kind": "advertised",
+        "advertised_discount_percent": "44",
+        "discount_reference": "unspecified",
+    }
+    offer = Offer.model_validate(candidate)
+    assert offer.discount_percent == Decimal("20.08")
+    assert offer.promotion.advertised_discount_percent == 44
+
+
 @pytest.mark.parametrize(
     "quantity,expected,unit",
     [

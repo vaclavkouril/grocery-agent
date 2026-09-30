@@ -32,7 +32,7 @@ def persist(
     *,
     at: datetime | None = None,
 ) -> bool:
-    run = ScrapeResult(store_id="mock")
+    run = ScrapeResult(source_id="mock")
     repository.start_run(run)
     offer = Offer.model_validate(candidate)
     evidence = SourceEvidence(

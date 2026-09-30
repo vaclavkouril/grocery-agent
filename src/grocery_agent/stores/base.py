@@ -7,6 +7,8 @@ from typing import Any
 import httpx
 from pydantic import JsonValue
 
+from grocery_agent.models.offer import Offer
+
 
 @dataclass(frozen=True)
 class SourceEvidence:
@@ -36,14 +38,35 @@ class AdapterContext:
     http: httpx.AsyncClient
 
 
-class StoreAdapter(ABC):
+class AcquisitionAdapter(ABC):
     """An adapter owns acquisition/parsing, never SQL or cross-store matching."""
 
     @property
     @abstractmethod
-    def store_id(self) -> str: ...
+    def source_id(self) -> str: ...
+
+    @abstractmethod
+    def validate_offer(self, offer: Offer) -> None:
+        """Reject candidates outside the source's identity boundary."""
+        ...
 
     @abstractmethod
     def fetch_offers(self, context: AdapterContext) -> AsyncIterator[AcquisitionItem]:
         """Stream canonical candidates or explicit item failures; raise on source failure."""
         ...
+
+
+class StoreAdapter(AcquisitionAdapter):
+    """Convenience contract for a source representing exactly one retailer."""
+
+    @property
+    @abstractmethod
+    def store_id(self) -> str: ...
+
+    @property
+    def source_id(self) -> str:
+        return self.store_id
+
+    def validate_offer(self, offer: Offer) -> None:
+        if offer.product.store_id != self.store_id:
+            raise ValueError("candidate store_id does not match the adapter")

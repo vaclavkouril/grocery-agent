@@ -163,7 +163,7 @@ async def test_run_logs_have_counts_and_ids(
     caplog.set_level(logging.INFO)
     result = await run_fixture(repository, snapshots, FixtureAdapter([make_item(candidate)]))
     event = next(r for r in caplog.records if r.message == "scrape_finished")
-    assert event.fields["run_id"] == result.run_id and event.fields["store_id"] == "mock"
+    assert event.fields["run_id"] == result.run_id and event.fields["source_id"] == "mock"
     assert event.fields["accepted"] == 1 and event.fields["finished_at"]
 
 

@@ -50,7 +50,7 @@ class SQLAlchemyOfferRepository:
             session.add(
                 ScrapeRunRow(
                     id=result.run_id,
-                    store_id=result.store_id,
+                    source_id=result.source_id,
                     started_at=result.started_at,
                     status=result.status,
                 )
@@ -204,7 +204,7 @@ class SQLAlchemyOfferRepository:
             return [
                 {
                     "run_id": row.id,
-                    "store_id": row.store_id,
+                    "source_id": row.source_id,
                     "status": row.status,
                     "started_at": row.started_at.isoformat(),
                     "finished_at": row.finished_at.isoformat() if row.finished_at else None,

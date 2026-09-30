@@ -8,7 +8,7 @@ from grocery_agent.models.common import utc_now
 
 @dataclass
 class ScrapeResult:
-    store_id: str
+    source_id: str
     run_id: str = field(default_factory=lambda: str(uuid4()))
     started_at: datetime = field(default_factory=utc_now)
     finished_at: datetime | None = None

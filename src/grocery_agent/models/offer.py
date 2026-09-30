@@ -22,11 +22,17 @@ class Availability(StrEnum):
 
 
 class PromotionType(StrEnum):
+    ADVERTISED = "advertised"
     PRICE_CUT = "price_cut"
     LOYALTY = "loyalty"
     MULTIBUY = "multibuy"
     COUPON = "coupon"
     OTHER = "other"
+
+
+class DiscountReference(StrEnum):
+    REGULAR_PRICE = "regular_price"
+    UNSPECIFIED = "unspecified"
 
 
 class Promotion(DomainModel):
@@ -36,6 +42,7 @@ class Promotion(DomainModel):
     minimum_purchase: int = Field(default=1, ge=1)
     conditions: NonEmpty | None = None
     advertised_discount_percent: Annotated[ExactDecimal, Field(ge=0, le=100)] | None = None
+    discount_reference: DiscountReference = DiscountReference.REGULAR_PRICE
 
     @model_validator(mode="after")
     def coherent_terms(self) -> Self:
@@ -75,14 +82,17 @@ class Offer(DomainModel):
             raise ValueError("variable-weight products require a mass price basis")
         if self.promotion:
             discount = self.promotion.advertised_discount_percent
+            regular_reference = self.promotion.discount_reference == DiscountReference.REGULAR_PRICE
             if self.regular_price is not None and self.current_price > self.regular_price:
                 raise ValueError("a promoted current price cannot exceed the regular price")
-            if self.promotion.kind == PromotionType.PRICE_CUT or discount is not None:
+            if self.promotion.kind == PromotionType.PRICE_CUT or (
+                discount is not None and regular_reference
+            ):
                 if self.regular_price is None or self.regular_price <= 0:
                     raise ValueError("discount promotions require a positive regular price")
                 if self.current_price >= self.regular_price:
                     raise ValueError("discount promotions require a lower current price")
-            if discount is not None and self.discount_percent is not None:
+            if discount is not None and regular_reference and self.discount_percent is not None:
                 if abs(discount - self.discount_percent) > Decimal(1):
                     raise ValueError("advertised discount disagrees with prices by over one point")
         # Derived prices must be representable too, not fail only when read downstream.

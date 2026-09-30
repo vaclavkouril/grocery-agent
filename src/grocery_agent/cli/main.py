@@ -15,7 +15,7 @@ from grocery_agent.persistence.database import open_database
 from grocery_agent.persistence.repository import SQLAlchemyOfferRepository
 from grocery_agent.persistence.snapshots import FileSnapshotStore
 from grocery_agent.pipeline.service import ScrapePipeline
-from grocery_agent.stores.base import AdapterContext, StoreAdapter
+from grocery_agent.stores.base import AcquisitionAdapter, AdapterContext
 from grocery_agent.stores.registry import default_registry
 
 
@@ -31,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def scrape_stores(settings: Settings, adapters: Sequence[StoreAdapter]) -> int:
+async def scrape_stores(settings: Settings, adapters: Sequence[AcquisitionAdapter]) -> int:
     engine = open_database(settings.database_url)
     try:
         pipeline = ScrapePipeline(

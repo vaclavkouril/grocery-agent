@@ -9,7 +9,7 @@ from grocery_agent.models.observation import PriceObservation
 from grocery_agent.models.offer import Offer
 from grocery_agent.persistence.base import OfferRepository, SnapshotStore
 from grocery_agent.pipeline.results import ScrapeResult
-from grocery_agent.stores.base import AdapterContext, StoreAdapter
+from grocery_agent.stores.base import AcquisitionAdapter, AdapterContext
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +22,8 @@ class ScrapePipeline:
         self.snapshots = snapshots
         self.resolver = resolver
 
-    async def run(self, adapter: StoreAdapter, context: AdapterContext) -> ScrapeResult:
-        result = ScrapeResult(store_id=adapter.store_id)
+    async def run(self, adapter: AcquisitionAdapter, context: AdapterContext) -> ScrapeResult:
+        result = ScrapeResult(source_id=adapter.source_id)
         self.repository.start_run(result)
         logger.info("scrape_started", extra={"fields": result.as_dict()})
         try:
@@ -35,8 +35,7 @@ class ScrapePipeline:
                     if item.error is not None:
                         raise ValueError(item.error)
                     offer = Offer.model_validate(item.candidate)
-                    if offer.product.store_id != adapter.store_id:
-                        raise ValueError("candidate store_id does not match the adapter")
+                    adapter.validate_offer(offer)
                     observation = PriceObservation(
                         offer=offer, observed_at=item.evidence.fetched_at, snapshot_id=snapshot.id
                     )
@@ -56,7 +55,7 @@ class ScrapePipeline:
                         extra={
                             "fields": {
                                 "run_id": result.run_id,
-                                "store_id": result.store_id,
+                                "source_id": result.source_id,
                                 "snapshot_id": snapshot.id,
                                 "locator": item.evidence.locator,
                                 "error": details,
@@ -85,7 +84,7 @@ class ScrapePipeline:
                 extra={
                     "fields": {
                         "run_id": result.run_id,
-                        "store_id": result.store_id,
+                        "source_id": result.source_id,
                     }
                 },
             )

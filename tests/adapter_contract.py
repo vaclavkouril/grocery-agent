@@ -1,11 +1,11 @@
 from collections.abc import Callable
 
 from grocery_agent.models.offer import Offer
-from grocery_agent.stores.base import AdapterContext, StoreAdapter
+from grocery_agent.stores.base import AcquisitionAdapter, AdapterContext
 
 
 async def assert_adapter_contract(
-    factory: Callable[[], StoreAdapter], context: AdapterContext, *, expected_count: int
+    factory: Callable[[], AcquisitionAdapter], context: AdapterContext, *, expected_count: int
 ) -> None:
     """Reusable contract check with a fixture-backed production adapter factory."""
     adapter = factory()
@@ -21,7 +21,7 @@ async def assert_adapter_contract(
         assert evidence.locator and evidence.url and evidence.media_type
         assert evidence.fetched_at.utcoffset() is not None
         offer = Offer.model_validate(item.candidate)
-        assert offer.product.store_id == adapter.store_id
+        adapter.validate_offer(offer)
         assert offer.product.sku and offer.product.normalized_name
         assert offer.current_price >= 0
         assert offer.unit_price.amount >= 0
