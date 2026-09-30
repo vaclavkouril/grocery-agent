@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "grocery-agent"
+version = "0.1.0"
+description = "Modular Czech grocery offer acquisition and price history"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+  "httpx>=0.28,<1",
+  "pydantic>=2.12,<3",
+  "pydantic-settings>=2.10,<3",
+  "sqlalchemy>=2.0.44,<3",
+]
+
+[project.optional-dependencies]
+html = ["beautifulsoup4>=4.13,<5", "lxml>=6,<7"]
+browser = ["playwright>=1.55,<2"]
+postgres = ["psycopg[binary]>=3.2,<4"]
+dev = ["pytest>=8.4,<10", "pytest-asyncio>=1.2,<2", "ruff>=0.14,<1", "mypy>=1.18,<2"]
+
+[project.scripts]
+grocery-agent = "grocery_agent.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/grocery_agent"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src"]
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers -m 'not live'"
+markers = ["live: optional tests requiring retailer/network access"]
+
