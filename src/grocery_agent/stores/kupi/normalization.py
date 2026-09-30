@@ -1,6 +1,6 @@
 import re
 import unicodedata
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from grocery_agent.models.product import Quantity, Unit
@@ -27,12 +27,23 @@ def czech_decimal(value: str) -> Decimal:
 
 def parse_quantity(value: str) -> Quantity:
     text = clean_text(value).lstrip("/ ")
-    match = re.fullmatch(r"(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|ks|bal)", text, re.I)
+    match = re.fullmatch(
+        r"(?:(\d+)\s*[x×]\s*)?(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|ks|bal|dávek|dávka|dávky)",
+        text,
+        re.I,
+    )
     if not match:
         raise ValueError(f"unrecognized price basis: {value!r}")
-    units = {"ks": Unit.PIECE, "bal": Unit.PACKAGE}
-    unit = units.get(match[2].lower()) or Unit(match[2].lower())
-    return Quantity(amount=czech_decimal(match[1]), unit=unit)
+    units = {
+        "ks": Unit.PIECE,
+        "bal": Unit.PACKAGE,
+        "dávek": Unit.SERVING,
+        "dávka": Unit.SERVING,
+        "dávky": Unit.SERVING,
+    }
+    unit = units.get(match[3].lower()) or Unit(match[3].lower())
+    count = czech_decimal(match[1]) if match[1] is not None else 1
+    return Quantity(amount=count * czech_decimal(match[2]), unit=unit)
 
 
 def parse_validity(value: str, today: date) -> tuple[date | None, date | None]:
@@ -42,6 +53,8 @@ def parse_validity(value: str, today: date) -> tuple[date | None, date | None]:
         return None, None
     if text == "dnes končí":
         return None, today
+    if text == "zítra končí":
+        return None, today + timedelta(days=1)
     dates = re.findall(r"(?<!\d)(\d{1,2})\.\s*(\d{1,2})\.(?:\s*(\d{4}))?", text)
     if len(dates) not in {1, 2}:
         raise ValueError(f"unrecognized validity: {value!r}")
@@ -65,6 +78,8 @@ def parse_validity(value: str, today: date) -> tuple[date | None, date | None]:
 
     first = nearest(dates[0], today)
     if len(dates) == 1:
+        if re.match(r"(?:ve?\s+)?(?:po|út|st|čt|pá|so|ne)\s+\d", text):
+            return first, first
         if not text.startswith("platí do"):
             raise ValueError("single validity date must explicitly mean valid until")
         return None, first

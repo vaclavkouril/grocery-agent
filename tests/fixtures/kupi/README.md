@@ -16,3 +16,10 @@ There are 54 rows on page one, 46 on page two, and 90 distinct campaign IDs over
 sponsored/recommended rows deliberately remain to exercise deduplication. Dates are interpreted
 against an injected capture timestamp. Runtime snapshots retain downloaded bytes, not these reduced
 fixtures. Do not replace fixture values with synthetic values without distinguishing that scenario.
+
+`groceries/` contains reduced first-page captures from all 13 grocery categories, also captured on
+2026-09-30. Each keeps representative rows plus multipacks, omitted quantities, servings, one-day
+validity and starting prices where present. These extracts omit pagination links to make one-page
+per-category fixture scenarios. The meat extract additionally retains an explicit counter-sale row.
+The production adapter's pagination is exercised separately by the original two-page fixtures and
+cross-category duplicate-page tests. The default-category contract uses these actual parser inputs.

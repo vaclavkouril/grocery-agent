@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from dataclasses import replace
 
 from pydantic import ValidationError
 
@@ -27,7 +28,7 @@ class ScrapePipeline:
         self.repository.start_run(result)
         logger.info("scrape_started", extra={"fields": result.as_dict()})
         try:
-            async for item in adapter.fetch_offers(context):
+            async for item in adapter.fetch_offers(replace(context, run_id=result.run_id)):
                 result.fetched += 1
                 snapshot = self.snapshots.save(item.evidence)
                 self.repository.add_snapshot(result.run_id, snapshot)

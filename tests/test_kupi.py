@@ -54,14 +54,15 @@ def test_loyalty_pack_and_mass_comparisons() -> None:
     assert blueberry.current_price == Decimal("24.90")
     assert blueberry.unit_price.amount == Decimal("199.2")
     assert blueberry.unit_price.unit == "kg"
-    assert blueberry.product.quantity.amount == Decimal("125")
+    assert blueberry.product.quantity is None
+    assert blueberry.price_basis.amount == Decimal("125") and blueberry.price_basis.unit == "g"
     assert blueberry.promotion.requires_loyalty
     assert blueberry.promotion.advertised_discount_percent == Decimal("44")
     assert blueberry.promotion.discount_reference == "unspecified"
     assert blueberry.valid_from == date(2026, 10, 1)
     assert blueberry.valid_until == date(2026, 10, 4)
     lettuce = offers["kupi:11114883"]
-    assert lettuce.product.quantity.amount == 2
+    assert lettuce.product.quantity is None and lettuce.price_basis.amount == 2
     assert lettuce.unit_price.unit == "piece"
     assert lettuce.unit_price.amount == lettuce.current_price / 2
     bananas = offers["kupi:11108694"]

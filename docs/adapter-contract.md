@@ -24,6 +24,8 @@ The method is implemented as `async def` containing `yield`. `AdapterContext` pr
 configured `httpx.AsyncClient`. The caller owns this client's lifetime. A browser adapter should
 open/close Playwright inside its async generator with context managers; install browser extras only
 when needed. Store-specific configuration can be injected into the registered adapter factory.
+`AdapterContext.run_id` is supplied by the pipeline so acquisition logs can correlate category/page
+events with the durable run. Direct parser/adapter tests may leave it unset.
 
 ## Required behavior
 
@@ -41,6 +43,11 @@ when needed. Store-specific configuration can be injected into the registered ad
    numeric prices, parse using `json.loads(..., parse_float=Decimal)` or equivalent.
 6. `product.quantity` is the total physical contents of one sold item. It may be unknown. Use the
    actual quoted `price_basis` (e.g. 1 kg for variable-weight chicken, 1 package for rice).
+   Packaging alone does not establish a fixed weight. Explicit multipacks describe total contents;
+   distinguish servings/doses from physical pieces. An unknown-size sale package may have a package
+   price basis with unknown contents; record any acquisition inference in source metadata.
+   Preserve starting prices as `price_qualifier = from` rather than an exact quote; derived unit
+   prices retain that qualifier and cannot be treated as guaranteed checkout costs.
 7. Stable `offer_key` distinguishes simultaneous standard, loyalty, coupon, or other selling terms.
    Keep a key stable across a price change; avoid prices, timestamps, or promotion dates in keys.
    `scope` identifies location/channel coverage. Do not merge region-limited prices into national.

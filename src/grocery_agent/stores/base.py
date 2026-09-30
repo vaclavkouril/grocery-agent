@@ -36,6 +36,7 @@ class AcquisitionItem:
 @dataclass(frozen=True)
 class AdapterContext:
     http: httpx.AsyncClient
+    run_id: str | None = None
 
 
 class AcquisitionAdapter(ABC):

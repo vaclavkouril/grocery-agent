@@ -147,6 +147,15 @@ def test_unspecified_claim_is_not_compared_to_regular_price(candidate: dict[str,
     assert offer.promotion.advertised_discount_percent == 44
 
 
+def test_from_price_retains_qualifier_and_has_no_calculated_savings(
+    candidate: dict[str, Any],
+) -> None:
+    candidate.update(price_qualifier="from", promotion={"kind": "advertised"})
+    offer = Offer.model_validate(candidate)
+    assert offer.discount_percent is None
+    assert offer.unit_price.price_qualifier == "from"
+
+
 @pytest.mark.parametrize(
     "quantity,expected,unit",
     [

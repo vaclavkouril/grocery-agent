@@ -14,6 +14,7 @@ class Unit(StrEnum):
     G = "g"
     L = "l"
     ML = "ml"
+    SERVING = "serving"
 
 
 class Quantity(DomainModel):

@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from bs4 import BeautifulSoup, Tag
 
 from grocery_agent.models.normalization import canonical_quantity
+from grocery_agent.models.product import Quantity, Unit
 from grocery_agent.stores.base import AcquisitionItem, SourceEvidence
 from grocery_agent.stores.kupi.normalization import (
     clean_text,
@@ -55,22 +56,40 @@ def parse_row(row: Tag, page_url: str, locality: str, fetched_at: datetime) -> d
     retailer = attribute(retailer_link, "href").removeprefix("/letaky/").strip("/")
     retailer = {"penny-market": "penny", "kosik-cz": "kosik"}.get(retailer, retailer)
     # Source-specific groups are comparison categories, not verified retailer SKUs/GTINs.
-    basis = parse_quantity(text(row, ".discount_amount"))
+    quantity_text = text(row, ".discount_amount", required=False)
+    basis = (
+        parse_quantity(quantity_text) if quantity_text else Quantity(amount=1, unit=Unit.PACKAGE)
+    )
     normalized_amount, normalized_unit = canonical_quantity(basis.amount, basis.unit)
-    sku = f"kupi:{product_id}:{normalized_amount.normalize():f}{normalized_unit}"
+    size_key = (
+        f"{normalized_amount.normalize():f}{normalized_unit}" if quantity_text else "unspecified"
+    )
+    multipack = re.search(r"(\d+)\s*[x×]", quantity_text)
+    if multipack:
+        size_key += f":{multipack[1]}x"
+    sku = f"kupi:{product_id}:{size_key}"
     note = text(row, ".discount_note", required=False)
-    packed = bool(re.search(r"\bbaleno\b|\bvanička\b", note, re.I))
+    # 'Packed' does not establish actual package weight for meat sold per kg/100 g.
+    contents = basis if multipack else None
+    explicit_contents = re.search(
+        r"(?:vanička|balení|sáček|láhev|plechovka)\s*:?\s*(\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l|ks))\b",
+        note,
+        re.I,
+    )
+    if explicit_contents:
+        contents = parse_quantity(explicit_contents[1])
     product: dict[str, Any] = {
         "store_id": retailer,
         "sku": sku,
         "name": clean_text(product_link.get_text(" ", strip=True)),
         "category": urlsplit(page_url).path.removeprefix("/slevy/").replace("-", " "),
-        "quantity": basis.model_dump(mode="json") if packed else None,
-        "variable_weight": bool(re.search(r"\bvážen[éýá]\b|na váhu", note, re.I)),
+        "quantity": contents.model_dump(mode="json") if contents else None,
+        "variable_weight": basis.unit in {Unit.KG, Unit.G}
+        and bool(re.search(r"\bvážen[éýá]\b|na váhu|pultový prodej", note, re.I)),
     }
     # For a known pack, price is for one pack with the advertised contents.
     # Otherwise retain the explicitly advertised mass/volume/piece price basis.
-    price_basis = {"amount": "1", "unit": "package"} if packed else basis.model_dump(mode="json")
+    price_basis = {"amount": "1", "unit": "package"} if multipack else basis.model_dump(mode="json")
     if product["variable_weight"]:
         product["quantity"] = None
         price_basis = basis.model_dump(mode="json")
@@ -95,6 +114,7 @@ def parse_row(row: Tag, page_url: str, locality: str, fetched_at: datetime) -> d
         "offer_key": f"kupi:{discount_id}",
         "scope": f"kupi:locality:{slug(locality)}",
         "current_price": str(czech_decimal(text(row, ".discount_price_value"))),
+        "price_qualifier": "from" if re.search(r"\bcena\s+od\b", note, re.I) else "exact",
         "regular_price": None,
         "price_basis": price_basis,
         "currency": "CZK",
@@ -140,6 +160,11 @@ def parse_page(content: bytes, url: str, fetched_at: datetime) -> ParsedPage:
                 "discount_source_id": discount_id,
                 "validity_text": text(row, ".discounts_validity", required=False),
                 "year_policy": "nearest year within 183 days; Europe/Prague",
+                "category_slug": urlsplit(url).path.removeprefix("/slevy/"),
+                "quantity_text": text(row, ".discount_amount", required=False),
+                "price_basis_policy": "explicit quote"
+                if text(row, ".discount_amount", required=False)
+                else "one advertised package; contents unknown",
             },
         )
         try:

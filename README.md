@@ -44,9 +44,11 @@ Run commands from the repository root. Runtime data, environments and caches are
 
 ## Scope
 
-This is the acquisition foundation with one real acquisition source. Kupi scrapes the public
-fruit-and-vegetable promotions category across retailers, retaining displayed locality and loyalty
-conditions. It does not collect full retailer inventories or establish exact cross-store identity.
+This is the acquisition foundation with one real acquisition source. Kupi scrapes 13 grocery
+categories across retailers: produce, meat/fish, dairy/eggs, bakery, canned food, deli, frozen/instant
+food, drinks, alcohol, snacks, cooking/baking, health food and baby food/care. It retains displayed
+locality, loyalty conditions and validity dates. It does not collect full retailer inventories or
+establish exact cross-store identity.
 See [Kupi mapping, configuration and verification](docs/kupi.md).
 
 Direct retailer adapters, fuzzy matching, analytics, shopping optimization, agents, and scheduling

@@ -12,6 +12,7 @@ LISTING_URL = "https://www.kupi.cz/slevy/ovoce-a-zelenina"
 
 
 def adapter(**settings: object) -> KupiAdapter:
+    settings.setdefault("listing_url", LISTING_URL)
     return KupiAdapter(KupiSettings(request_delay_seconds=0, **settings))
 
 

@@ -21,6 +21,11 @@ class Availability(StrEnum):
     UNKNOWN = "unknown"
 
 
+class PriceQualifier(StrEnum):
+    EXACT = "exact"
+    FROM = "from"
+
+
 class PromotionType(StrEnum):
     ADVERTISED = "advertised"
     PRICE_CUT = "price_cut"
@@ -58,6 +63,7 @@ class Promotion(DomainModel):
 class UnitPrice(DomainModel):
     amount: MoneyAmount
     unit: Unit
+    price_qualifier: PriceQualifier = PriceQualifier.EXACT
 
 
 class Offer(DomainModel):
@@ -65,6 +71,7 @@ class Offer(DomainModel):
     offer_key: NonEmpty = "standard"
     scope: NonEmpty = "national"
     current_price: MoneyAmount
+    price_qualifier: PriceQualifier = PriceQualifier.EXACT
     regular_price: MoneyAmount | None = None
     currency: Currency = Currency.CZK
     price_basis: Quantity
@@ -102,7 +109,11 @@ class Offer(DomainModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def discount_percent(self) -> Decimal | None:
-        if not self.regular_price or self.current_price >= self.regular_price:
+        if (
+            self.price_qualifier != PriceQualifier.EXACT
+            or not self.regular_price
+            or self.current_price >= self.regular_price
+        ):
             return None
         return ((1 - self.current_price / self.regular_price) * 100).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
@@ -124,4 +135,5 @@ class Offer(DomainModel):
                 Decimal("0.0001"), rounding=ROUND_HALF_UP
             ),
             unit=Unit(unit),
+            price_qualifier=self.price_qualifier,
         )

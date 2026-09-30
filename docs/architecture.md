@@ -33,7 +33,7 @@ repository can replace this implementation when measured throughput or concurren
 | --- | --- |
 | Product | Cross-store identity; UUID resolved from validated GTIN initially |
 | StoreProduct | Retailer identity `(store_id, sku)` and descriptive product facts |
-| Quantity | Positive Decimal amount and enum: piece, package, kg, g, l, ml |
+| Quantity | Positive Decimal amount and enum: piece, package, kg, g, l, ml, serving |
 | Offer | StoreProduct + opaque stable offer key + location/channel scope + selling terms |
 | Promotion | Canonical type, loyalty requirement, minimum purchase, conditions, claimed discount |
 | PriceObservation | Offer captured at an aware timestamp, linked to source snapshot |
@@ -59,6 +59,10 @@ total contents of one sale item (e.g. 6 x 500 ml = 3000 ml); price basis could b
 Variable-weight goods require a mass price basis. Derived unit prices normalize g to kg and ml to l;
 unknown contents remain priced per piece/package. Conditional unit prices retain promotion conditions;
 an optimizer must check minimum purchase, loyalty and other conditions before using them.
+`price_qualifier` distinguishes an exact quote from a starting/lower-bound quote (`from`); derived
+unit prices retain the same qualifier. Lower bounds do not produce a calculated discount percentage.
+Coffee doses/servings are distinct from physical pieces. Packaging alone does not establish weight;
+adapters must preserve an explicit mass basis when actual pack contents are unknown.
 Promotion percentages specify their comparison reference. `unspecified` means a preserved source
 claim, not calculated regular-price savings. `advertised` can represent an advertised promotion
 without a known baseline. `price_cut` still requires a lower current price and positive regular price.
@@ -89,6 +93,8 @@ compatibility with existing SQLite databases; SQLAlchemy maps that column explic
 identity in `store_products.store_id` is unchanged. Old promotion JSON without `discount_reference`
 continues to mean `regular_price` through the schema default. Re-ingestion materializes that field
 and may record one schema-related state change; no history is rewritten.
+Likewise, old offers default to `price_qualifier = exact`; re-ingestion materializes that field and
+may add one state. These additions live in canonical JSON and require no new SQL columns.
 
 Only consecutive identical canonical offer states collapse into an existing observation; `last_seen`
 advances and a scrape item records the new evidence. A -> B -> A produces three historical states.

@@ -1,7 +1,9 @@
 import asyncio
 import hashlib
 import json
+import logging
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from email.utils import parsedate_to_datetime
 from urllib.parse import parse_qs, urlsplit
 
@@ -18,6 +20,14 @@ from grocery_agent.stores.base import (
 from grocery_agent.stores.kupi.config import KupiSettings
 from grocery_agent.stores.kupi.parser import parse_page
 from grocery_agent.stores.kupi.robots import RobotsPolicy
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _CoverageState:
+    locality: str | None = None
+    seen: dict[str, str] = field(default_factory=dict)
 
 
 class KupiAdapter(AcquisitionAdapter):
@@ -37,9 +47,9 @@ class KupiAdapter(AcquisitionAdapter):
         ):
             raise ValueError("candidate identity does not belong to Kupi")
 
-    def _page_number(self, url: str) -> int:
+    def _page_number(self, url: str, listing_url: str) -> int:
         parsed = urlsplit(url)
-        initial = urlsplit(self.settings.listing_url)
+        initial = urlsplit(listing_url)
         query = parse_qs(parsed.query, keep_blank_values=True)
         if (
             parsed.scheme != initial.scheme
@@ -90,20 +100,88 @@ class KupiAdapter(AcquisitionAdapter):
         robots.raise_for_status()
         policy = RobotsPolicy.parse(robots.text, context.http.headers.get("User-Agent", ""))
         delay = max(delay, policy.delay)
-        url: str | None = self.settings.listing_url
+        state = _CoverageState()
+        failures = []
+        for listing_url in self.settings.listing_urls:
+            try:
+                async for item in self._fetch_category(context, listing_url, policy, delay, state):
+                    yield item
+            except (httpx.HTTPError, ValueError) as exc:
+                # Access/rate denial applies to the source; stop before making further requests.
+                if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in {
+                    403,
+                    429,
+                }:
+                    raise
+                failures.append(f"{listing_url}: {type(exc).__name__}: {exc}")
+        if failures:
+            raise ValueError("incomplete category coverage: " + "; ".join(failures))
+
+    async def _fetch_category(
+        self,
+        context: AdapterContext,
+        listing_url: str,
+        policy: RobotsPolicy,
+        delay: float,
+        state: _CoverageState,
+    ) -> AsyncIterator[AcquisitionItem]:
+        fields = {
+            "source_id": self.source_id,
+            "run_id": context.run_id,
+            "category_url": listing_url,
+            "category_slug": urlsplit(listing_url).path.rsplit("/", 1)[-1],
+        }
+        logger.info("category_started", extra={"fields": fields})
+        counters = {"pages": 0, "emitted": 0, "duplicates": 0, "parser_errors": 0}
+        status = "interrupted"
+        try:
+            async for item in self._category_items(
+                context, listing_url, policy, delay, state, counters
+            ):
+                counters["emitted"] += 1
+                counters["parser_errors"] += int(item.error is not None)
+                yield item
+            status = "partial" if counters["parser_errors"] else "success"
+        except Exception as exc:
+            status = "failed"
+            logger.error("category_failed", extra={"fields": {**fields, "error": str(exc)}})
+            raise
+        finally:
+            logger.info(
+                "category_finished",
+                extra={
+                    "fields": {
+                        **fields,
+                        **counters,
+                        "status": status,
+                        "locality": state.locality,
+                    }
+                },
+            )
+
+    async def _category_items(
+        self,
+        context: AdapterContext,
+        listing_url: str,
+        policy: RobotsPolicy,
+        delay: float,
+        state: _CoverageState,
+        counters: dict[str, int],
+    ) -> AsyncIterator[AcquisitionItem]:
+        url: str | None = listing_url
         previous_page = 0
-        locality: str | None = None
-        seen: dict[str, str] = {}
+        category_seen: set[str] = set()
         for _ in range(self.settings.max_pages):
             if url is None:
                 return
-            page_number = self._page_number(url)
+            page_number = self._page_number(url, listing_url)
             if page_number <= previous_page:
                 raise ValueError("pagination cycle or backward page")
             previous_page = page_number
             if not policy.permits(url):
                 raise ValueError(f"robots.txt disallows listing: {url}")
             response = await self._get(context, url, delay)
+            counters["pages"] += 1
             fetched_at = utc_now()
             evidence = SourceEvidence(
                 content=response.content,
@@ -111,17 +189,21 @@ class KupiAdapter(AcquisitionAdapter):
                 media_type="text/html",
                 fetched_at=fetched_at,
                 locator="document",
-                metadata={"source_id": self.source_id, "http_status": response.status_code},
+                metadata={
+                    "source_id": self.source_id,
+                    "http_status": response.status_code,
+                    "category_slug": urlsplit(listing_url).path.rsplit("/", 1)[-1],
+                },
             )
             try:
                 response.raise_for_status()
                 page = parse_page(response.content, url, fetched_at)
-                if locality is not None and page.locality != locality:
+                if state.locality is not None and page.locality != state.locality:
                     raise ValueError("locality changed between pages")
             except (httpx.HTTPStatusError, ValueError) as exc:
                 yield AcquisitionItem(evidence=evidence, error=f"listing failure: {exc}")
                 raise
-            locality = page.locality
+            state.locality = page.locality
             progress = 0
             for item in page.items:
                 if item.candidate is None:
@@ -129,17 +211,28 @@ class KupiAdapter(AcquisitionAdapter):
                     progress += 1
                     continue
                 key = item.candidate["offer_key"]
+                if key not in category_seen:
+                    category_seen.add(key)
+                    progress += 1
+                # One campaign may be listed in several categories. First category wins;
+                # compare substantive facts independently of that navigation classification.
+                candidate = {
+                    **item.candidate,
+                    "product": {
+                        k: v for k, v in item.candidate["product"].items() if k != "category"
+                    },
+                }
                 fingerprint = hashlib.sha256(
-                    json.dumps(item.candidate, sort_keys=True, ensure_ascii=False).encode()
+                    json.dumps(candidate, sort_keys=True, ensure_ascii=False).encode()
                 ).hexdigest()
-                if key in seen:
-                    if seen[key] != fingerprint:
+                if key in state.seen:
+                    counters["duplicates"] += 1
+                    if state.seen[key] != fingerprint:
                         yield AcquisitionItem(
                             evidence=item.evidence, error="conflicting repeated campaign"
                         )
                     continue
-                seen[key] = fingerprint
-                progress += 1
+                state.seen[key] = fingerprint
                 yield item
             if not progress and page.next_url is not None:
                 raise ValueError("pagination made no progress")
