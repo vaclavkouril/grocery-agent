@@ -96,6 +96,8 @@ HTTP/stream/storage failures are run errors; already committed items survive. Em
 and return a failing CLI exit code. Missing items never imply deletion or unavailability automatically.
 Cancellation marks runs as cancelled before propagating. Unexpected tracebacks remain in structured
 logs; canonical rejection details and raw evidence are retained for investigation.
+Abrupt termination can leave a run `running` with incomplete counters; recovery is deferred. Run
+counters become final at completion, while item-level commits are durable during ingestion.
 
 ## Review questions
 
@@ -105,6 +107,6 @@ logs; canonical rejection details and raw evidence are retained for investigatio
 - Variable-weight GTINs and retailer-specific EAN ranges: adapters must omit codes that identify a
   transaction or encode weight rather than a reusable product.
 - Canonical catalog stewardship, merges/splits and later comparable-product groups.
+- SKU reuse and exact-match reassignment policies; missing GTIN currently preserves prior matches.
 - Raw-data retention/redaction policy, database migrations and multi-process locking.
 - Actual PostgreSQL validation and scheduling after the first retailer is reviewed.
-

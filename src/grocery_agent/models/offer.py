@@ -86,7 +86,7 @@ class Offer(DomainModel):
                 if abs(discount - self.discount_percent) > Decimal(1):
                     raise ValueError("advertised discount disagrees with prices by over one point")
         # Derived prices must be representable too, not fail only when read downstream.
-        self.unit_price
+        _ = self.unit_price
         return self
 
     @computed_field  # type: ignore[prop-decorator]
@@ -106,7 +106,7 @@ class Offer(DomainModel):
         amount, unit = canonical_quantity(basis.amount, basis.unit)
         contents = self.product.quantity
         if basis.unit in {Unit.PIECE, Unit.PACKAGE} and contents is not None:
-            if contents.unit not in {Unit.PIECE, Unit.PACKAGE}:
+            if contents.unit != Unit.PACKAGE:
                 content_amount, unit = canonical_quantity(contents.amount, contents.unit)
                 amount *= content_amount
         return UnitPrice(
