@@ -22,6 +22,7 @@ grocery-agent scrape mock
 grocery-agent scrape kupi
 grocery-agent scrape --all
 grocery-agent runs --limit 10
+grocery-agent meals
 ```
 
 HTML parsing is included for Kupi. Browser automation (`.[browser]`) and PostgreSQL (`.[postgres]`)
@@ -51,8 +52,20 @@ locality, loyalty conditions and validity dates. It does not collect full retail
 establish exact cross-store identity.
 See [Kupi mapping, configuration and verification](docs/kupi.md).
 
-Direct retailer adapters, fuzzy matching, analytics, shopping optimization, agents, and scheduling
+Direct retailer adapters, fuzzy matching, general shopping optimization, agents, and scheduling
 remain future work. `--all` runs both registered sources, including the offline mock.
+
+## One-off meal suggestions
+
+`grocery-agent meals` generates a local HTML/JSON report from the latest complete, fresh offers.
+`grocery-agent workflow` scrapes the configured source and then generates the report in one run.
+No timer is activated. Open `data/reports/latest.html`; see [meal workflow](docs/meals.md).
+
+The initial profile is Praha, lactose-free, one large serving, at least 70 g protein, and up to two
+supermarket chains. Edit recipes, nutrition sources and limits in `config/meals.toml`. Cost estimates
+cover the amount used; whole packs, travel and stock are not guaranteed. Oil/spices use explicit
+pantry estimates. Meal planning consumes canonical data through a read interface without retailer
+branches or LLM dependencies.
 
 ## Adding a retailer
 
@@ -73,7 +86,7 @@ an adapter, especially price basis, promotion variants, provenance, and item-lev
 
 Settings use `GROCERY_` environment variables or `.env`; environment variables take precedence.
 Paths resolve from the process working directory. Use absolute paths and the virtual environment
-executable when configuring a future systemd timer. Run a single writer process at a time.
+executable when configuring a future systemd timer. CLI writers share an advisory process lock.
 
 The database is created automatically. Raw snapshots are content-addressed under `data/snapshots`.
 Back up the database and snapshot directory together. JSON logs go to stderr; CLI summaries go to

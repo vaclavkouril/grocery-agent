@@ -9,6 +9,9 @@ flowchart TD
     Validate --> Resolve[ProductResolver: exact GTIN only]
     Resolve --> Repo[OfferRepository]
     Repo --> SQL[SQLAlchemy: SQLite initially]
+    SQL --> Reader[CurrentOfferReader: complete batch]
+    Reader --> Meals[Meal planner: configuration + ingredient nutrition]
+    Meals --> Reports[Local HTML / JSON reports]
     SQL --> Future[Future matching / analytics / optimizer / agents]
     Validate --> Reject[Persisted rejection + JSON log]
 ```
@@ -19,7 +22,9 @@ flowchart TD
 `stores/` contains acquisition, parsing, and registration. `pipeline/` saves evidence, validates,
 resolves identity through a protocol, and persists through a repository protocol. `persistence/`
 implements SQLAlchemy and file snapshots. `cli/` composes the services. No retailer branching exists
-outside adapters. Analytics and optimization are deliberately deferred rather than empty frameworks.
+outside adapters. `meals/` consumes canonical offers through a read protocol and uses curated
+ingredient data and fixed recipes; it is independent of acquisition and exact identity matching.
+General analytics and optimization remain deferred. See [meal workflow](meals.md).
 
 Adapters use the injected `httpx.AsyncClient`; browser dependencies are optional. HTML parsing is
 included for the Kupi source. Acquisition
@@ -131,5 +136,7 @@ counters become final at completion, while item-level commits are durable during
   transaction or encode weight rather than a reusable product.
 - Canonical catalog stewardship, merges/splits and later comparable-product groups.
 - SKU reuse and exact-match reassignment policies; missing GTIN currently preserves prior matches.
-- Raw-data retention/redaction policy, database migrations and multi-process locking.
+- Raw-data retention/redaction policy, database migrations and embedded-writer locking.
 - Actual PostgreSQL validation and scheduling after the first retailer is reviewed.
+- Ingredient matching coverage, actual label nutrition, pack-aware shopping totals, pantry inventory,
+  and extending the initial three recipes without confusing heuristic matches with product identity.

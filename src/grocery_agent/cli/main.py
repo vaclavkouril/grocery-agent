@@ -11,12 +11,15 @@ from sqlalchemy.exc import SQLAlchemyError
 from grocery_agent.config import Settings
 from grocery_agent.logging import configure_logging
 from grocery_agent.matching.base import ExactGTINResolver
+from grocery_agent.meals.catalog import MealCatalog
+from grocery_agent.meals.report import save_failure
 from grocery_agent.persistence.database import open_database
 from grocery_agent.persistence.repository import SQLAlchemyOfferRepository
 from grocery_agent.persistence.snapshots import FileSnapshotStore
 from grocery_agent.pipeline.service import ScrapePipeline
 from grocery_agent.stores.base import AcquisitionAdapter, AdapterContext
 from grocery_agent.stores.registry import default_registry
+from grocery_agent.workflow import generate_meals, writer_lock
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -28,6 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
     scrape.add_argument("--all", action="store_true", dest="all_stores")
     runs = commands.add_parser("runs", help="show recent scrape outcomes as JSON")
     runs.add_argument("--limit", type=int, default=10)
+    commands.add_parser("meals", help="write protein meal reports from the latest complete batch")
+    commands.add_parser("workflow", help="scrape the configured source, then write meal reports")
     return parser
 
 
@@ -72,13 +77,30 @@ def main(argv: Sequence[str] | None = None) -> int:
             ]
         except ValueError as exc:
             parser.error(str(exc))
-    elif args.limit <= 0:
+    elif args.command == "runs" and args.limit <= 0:
         parser.error("--limit must be positive")
     try:
         settings = Settings()
         configure_logging(settings.log_level)
         if args.command == "scrape":
-            return asyncio.run(scrape_stores(settings, adapters))
+            with writer_lock(settings.lock_path):
+                return asyncio.run(scrape_stores(settings, adapters))
+        if args.command in {"meals", "workflow"}:
+            # Validate the full meal configuration before making network requests.
+            catalog = MealCatalog.load(settings.meal_config)
+            with writer_lock(settings.lock_path):
+                try:
+                    if args.command == "workflow":
+                        adapter = registry.create(catalog.policy.source_id)
+                        save_failure(settings.report_dir, "Refreshing offers; new report pending")
+                        if asyncio.run(scrape_stores(settings, [adapter])):
+                            raise ValueError("acquisition failed; no new meal report is available")
+                    report = generate_meals(settings, catalog)
+                    print(report.model_dump_json(exclude_computed_fields=True))
+                    return 0
+                except (Exception, KeyboardInterrupt):
+                    save_failure(settings.report_dir, "Meal workflow failed; inspect runs and logs")
+                    raise
         engine = open_database(settings.database_url)
         try:
             print(
@@ -91,7 +113,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             engine.dispose()
     except KeyboardInterrupt:
         return 130
-    except (ValidationError, SQLAlchemyError, OSError) as exc:
+    except (ValidationError, ValueError, SQLAlchemyError, OSError) as exc:
         logging.getLogger(__name__).error(
             "command_failed",
             extra={

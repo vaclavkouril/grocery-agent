@@ -10,6 +10,9 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///data/grocery.db"
     snapshot_dir: Path = Path("data/snapshots")
+    meal_config: Path = Path("config/meals.toml")
+    report_dir: Path = Path("data/reports")
+    lock_path: Path = Path("data/workflow.lock")
     http_timeout_seconds: float = Field(default=30, gt=0, le=300)
     user_agent: str = Field(default="grocery-agent/0.1", min_length=1)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"

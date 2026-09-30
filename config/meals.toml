@@ -1,0 +1,107 @@
+# One large serving; raw purchased grams (vegetable trimming is accounted for below).
+# Nutrition: small, attributed factual records from Czech Food Composition Database.
+# Recipe matches are conservative lexical suggestions, not exact product identity resolution.
+[policy]
+source_id = "kupi"
+scope = "kupi:locality:praha"
+location_label = "Praha"
+timezone = "Europe/Prague"
+lactose_free = true
+servings = 1
+min_protein_g = "70"
+max_kcal = "850"
+max_cost_per_serving_czk = "100"
+max_age_hours = 36
+allow_loyalty = false
+# Ordinary supermarket chains for this initial Praha meal profile.
+retailers = ["albert", "billa", "lidl", "penny", "kaufland", "tesco", "globus"]
+max_stores = 2
+ranking = "protein_per_czk"
+# Oil and seasonings are explicitly estimated pantry costs, not scraped prices.
+seasoning_allowance_czk = "3"
+
+[ingredients.chicken]
+label = "Skinless boneless chicken breast (raw)"
+name_pattern = '^kuřecí prsní řízky(?:\s|$)'
+lactose_free = true
+nutrition_source = "https://www.nutridatabaze.cz/potraviny/?id=230"
+nutrients_per_100g_edible = {kcal="102", protein_g="22.8", carbs_g="0", fat_g="1.2"}
+
+[ingredients.turkey]
+label = "Skinless boneless turkey breast (raw)"
+name_pattern = '^krůtí (?:prsní řízky|prsa)(?:\s|$)'
+lactose_free = true
+nutrition_source = "https://www.nutridatabaze.cz/potraviny/?id=452"
+nutrients_per_100g_edible = {kcal="107", protein_g="24.2", carbs_g="0", fat_g="1.1"}
+
+[ingredients.lentils]
+label = "Red lentils (dry)"
+name_pattern = '^(?:čočka červená|červená čočka)(?:\s|$)'
+lactose_free = true
+nutrition_source = "https://www.nutridatabaze.cz/potraviny/?id=647"
+nutrients_per_100g_edible = {kcal="313", protein_g="24.7", carbs_g="39.2", fat_g="1.3"}
+
+[ingredients.rice]
+label = "White rice (dry; generic nutrition estimate)"
+name_pattern = '^(?:rýže (?:dlouhozrnná|loupaná|jasmínová)|jasmínová rýže)(?:\s|$)'
+exclude_pattern = 'natural|neloupan|celozrnn|obalovan|marinovan|ochucen|hotov|vařen|mléčn|směs|omáčk'
+lactose_free = true
+nutrition_source = "https://www.nutridatabaze.cz/potraviny/?id=181"
+nutrients_per_100g_edible = {kcal="351", protein_g="7.2", carbs_g="78.7", fat_g="0.4"}
+
+[ingredients.carrot]
+label = "Carrots (raw, before trimming)"
+name_pattern = '^mrkev(?:\s|$)'
+lactose_free = true
+# Conservative database edible-yield coefficient, including trimming loss.
+edible_fraction = "0.61"
+nutrition_source = "https://www.nutridatabaze.cz/potraviny/?id=62"
+nutrients_per_100g_edible = {kcal="36", protein_g="1", carbs_g="6.1", fat_g="0.2"}
+
+[ingredients.onion]
+label = "Onion (raw, before peeling)"
+name_pattern = '^cibule kuchyňská(?:\s|$)'
+lactose_free = true
+edible_fraction = "0.92"
+nutrition_source = "https://www.nutridatabaze.cz/potraviny/?id=51"
+nutrients_per_100g_edible = {kcal="39", protein_g="1.4", carbs_g="6.6", fat_g="0.3"}
+
+[ingredients.oil]
+label = "Rapeseed oil (pantry estimate)"
+lactose_free = true
+pantry_price_per_kg_czk = "200"
+nutrition_source = "https://www.nutridatabaze.cz/potraviny/?id=84"
+nutrients_per_100g_edible = {kcal="898", protein_g="0", carbs_g="0", fat_g="99.8"}
+
+[[recipes]]
+title = "Smoky chicken with creamy red lentils and roasted carrots"
+minutes = 35
+grams = {chicken="300", lentils="80", carrot="200", onion="50", oil="10"}
+steps = [
+  "Peel and chop the carrots and onion. Cut the plain chicken breast into strips. Use only dairy-free ingredients; check any seasoning blend's label.",
+  "Toss the carrots with half the oil, salt, cumin and smoked paprika. Roast at 210 °C until browned and tender, about 20–25 minutes.",
+  "Soften the onion in the remaining oil. Stir in the rinsed dry red lentils, paprika and about 250 ml water per serving. Simmer 12–18 minutes until soft; add water as needed. Mash lightly for a creamy texture without dairy.",
+  "Season the chicken with paprika, pepper and salt. Brown it in a nonstick pan and cook through. Spoon the lentils onto a plate, top with chicken and carrots. Optional pantry vinegar adds brightness; no cream or butter.",
+]
+
+[[recipes]]
+title = "Paprika chicken and red lentil skillet"
+minutes = 30
+grams = {chicken="250", lentils="80", carrot="200", onion="50", oil="10"}
+steps = [
+  "Peel and chop the onion and carrots. Slice plain chicken breast and rinse the dry lentils. Choose dairy-free seasonings.",
+  "Brown the chicken in the oil with smoked paprika, salt and pepper. Remove it to a plate.",
+  "Soften the onion and carrots in the pan, then add the lentils and about 250 ml water per serving. Simmer until tender, adding water as needed.",
+  "Return the chicken and finish cooking it through. Adjust salt and pepper and serve; optional pantry vinegar brightens the lentils.",
+]
+
+[[recipes]]
+title = "Cumin turkey with rice and roasted carrots"
+minutes = 35
+grams = {turkey="300", rice="70", carrot="200", onion="50", oil="10"}
+steps = [
+  "Cook the dry white rice in water according to its packet instructions. Peel and chop the vegetables.",
+  "Roast the carrots and onion at 210 °C with half the oil, cumin, pepper and salt until tender.",
+  "Slice plain turkey breast and season it with paprika and cumin. Brown in the remaining oil and cook through.",
+  "Serve the turkey over rice with the roasted vegetables. Use dairy-free seasoning blends; no butter, cream or cheese.",
+]
