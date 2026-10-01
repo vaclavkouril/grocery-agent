@@ -31,8 +31,17 @@ def stable_id(*parts: str) -> str:
 
 def state_fingerprint(offer: Offer) -> str:
     payload = offer.model_dump(mode="json", exclude={"source_url"}, exclude_computed_fields=True)
+    # Preserve fingerprints of historical observations without purchase metadata.
+    if payload.get("purchase_terms") is None:
+        payload.pop("purchase_terms", None)
     # Quantities are semantically equivalent across g/kg and ml/l.
-    for quantity in (payload["price_basis"], payload["product"].get("quantity")):
+    terms = payload.get("purchase_terms") or {}
+    for quantity in (
+        payload["price_basis"],
+        payload["product"].get("quantity"),
+        terms.get("minimum_quantity"),
+        terms.get("quantity_increment"),
+    ):
         if quantity and quantity["unit"] in {"g", "ml"}:
             quantity["amount"] = format((Decimal(quantity["amount"]) / 1000).normalize(), "f")
             quantity["unit"] = {"g": "kg", "ml": "l"}[quantity["unit"]]

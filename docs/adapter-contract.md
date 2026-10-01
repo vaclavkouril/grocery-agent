@@ -96,6 +96,13 @@ Add malformed records and source-level error tests as well as happy-path cases.
 
 ## Failure and history semantics
 
+`Offer.purchase_terms` optionally preserves explicit sale minimums/increments and VAT inclusion.
+These quantities use the price-basis unit; physical contents remain on `product.quantity`.
+Deposits and mandatory item fees use the same price basis as `current_price`. Missing charges
+mean unknown, not zero. `minimum_purchase_cost` and `purchase_cost(required_quantity)` round
+up to purchasable quantities and only return an all-in item total when those charges are known.
+Estimated weights and unknown basket-level charges must not become guaranteed checkout totals.
+
 The pipeline saves source evidence before validation. Invalid items are persisted as rejected with
 diagnostics; they never create product, offer or price rows. `fetched = accepted + rejected` for
 completed runs; an operational failure may leave a fetched item incomplete. `changed` counts new
