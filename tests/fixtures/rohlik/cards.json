@@ -1,0 +1,456 @@
+[
+  {
+    "productId": 1322689,
+    "image": {
+      "path": "https://cdn.rohlik.cz/images/grocery/products/1322689/1322689-1676973316311.jpg",
+      "backgroundColor": "#F6F6F6"
+    },
+    "name": "SEMO Řeřicha zahradní",
+    "slug": "semo-rericha-zahradni",
+    "brand": null,
+    "countryOfOriginFlagIconPath": "https://cdn.rohlik.cz/images/countryFlags/cz.svg",
+    "favorites": {
+      "canBeFavorite": true,
+      "favorite": false
+    },
+    "unit": "balení",
+    "textualAmount": "1 balení",
+    "weightedItem": false,
+    "badges": [
+      {
+        "position": "PRODUCT",
+        "type": "LOCAL_BRAND",
+        "slug": "local-brand",
+        "text": "Lokální značka",
+        "textColor": "#185729",
+        "backgroundColor": "#DDF4DE",
+        "link": null,
+        "icon": null,
+        "trailingIcon": null,
+        "trailingIconLabel": null,
+        "secondaryText": null
+      }
+    ],
+    "prices": {
+      "originalPrice": 20.9,
+      "salePrice": null,
+      "unitPrice": 20.9,
+      "saleId": null,
+      "salePriceStyle": null,
+      "saleValidTill": null,
+      "saleText": null,
+      "currency": "CZK"
+    },
+    "stock": {
+      "maxAvailableAmount": 50,
+      "availabilityStatus": "AVAILABLE",
+      "availabilityReason": null,
+      "maxBasketAmountReason": "ALLOWED"
+    },
+    "tooltips": [],
+    "ratings": [],
+    "type": "PRODUCT"
+  },
+  {
+    "productId": 1352137,
+    "image": {
+      "path": "https://cdn.rohlik.cz/images/grocery/products/1352137/1352137-1571427128.jpg",
+      "backgroundColor": "#F6F6F6"
+    },
+    "name": "Hruška odr. Abate 1ks",
+    "slug": "hruska-odr-abate-1ks",
+    "brand": null,
+    "countryOfOriginFlagIconPath": null,
+    "favorites": {
+      "canBeFavorite": true,
+      "favorite": false
+    },
+    "unit": "kg",
+    "textualAmount": "cca 220 g",
+    "weightedItem": true,
+    "badges": [],
+    "prices": {
+      "originalPrice": 29.07,
+      "salePrice": null,
+      "unitPrice": 134.9,
+      "saleId": null,
+      "salePriceStyle": null,
+      "saleValidTill": null,
+      "saleText": null,
+      "currency": "CZK"
+    },
+    "stock": {
+      "maxAvailableAmount": 50,
+      "availabilityStatus": "AVAILABLE",
+      "availabilityReason": null,
+      "maxBasketAmountReason": "ALLOWED"
+    },
+    "tooltips": [],
+    "ratings": [],
+    "type": "PRODUCT"
+  },
+  {
+    "productId": 1409777,
+    "image": {
+      "path": "https://cdn.rohlik.cz/images/grocery/products/1409777/1409777-1620927333317.jpg",
+      "backgroundColor": "#F6F6F6"
+    },
+    "name": "BIO Batát (sladká brambora), volně",
+    "slug": "bio-batat-sladka-brambora-volne",
+    "brand": null,
+    "countryOfOriginFlagIconPath": null,
+    "favorites": {
+      "canBeFavorite": true,
+      "favorite": false
+    },
+    "unit": "kg",
+    "textualAmount": "cca 220 g",
+    "weightedItem": true,
+    "badges": [
+      {
+        "position": "PRICE",
+        "type": null,
+        "slug": null,
+        "text": "-10 % pro vás",
+        "textColor": "#1C2529",
+        "backgroundColor": "#DDF4DE",
+        "link": null,
+        "icon": null,
+        "trailingIcon": null,
+        "trailingIconLabel": null,
+        "secondaryText": null
+      },
+      {
+        "position": "PRODUCT",
+        "type": "TAG_BASED_BADGE",
+        "slug": "bio",
+        "text": "BIO",
+        "textColor": "#185729",
+        "backgroundColor": "#DDF4DE",
+        "link": null,
+        "icon": null,
+        "trailingIcon": null,
+        "trailingIconLabel": null,
+        "secondaryText": null
+      }
+    ],
+    "prices": {
+      "originalPrice": 31.27,
+      "salePrice": 28.14,
+      "unitPrice": 130.41,
+      "saleId": 11101957,
+      "salePriceStyle": {
+        "textColor": "#1C2529",
+        "backgroundColor": "#DDF4DE"
+      },
+      "saleValidTill": null,
+      "saleText": "-10 % pro vás",
+      "currency": "CZK"
+    },
+    "stock": {
+      "maxAvailableAmount": 50,
+      "availabilityStatus": "AVAILABLE",
+      "availabilityReason": null,
+      "maxBasketAmountReason": "ALLOWED"
+    },
+    "tooltips": [
+      {
+        "type": "PRODUCT_EXTREME_WEIGHT",
+        "closable": true,
+        "triggerAmount": 6,
+        "size": null,
+        "message": "Prosím, zkontrolujte množství položek před dokončením objednávky.",
+        "actionable": false
+      }
+    ],
+    "ratings": [],
+    "type": "PRODUCT"
+  },
+  {
+    "productId": 1406131,
+    "image": {
+      "path": "https://cdn.rohlik.cz/images/grocery/products/1406131/1406131-1612521024727.jpg",
+      "backgroundColor": "#F6F6F6"
+    },
+    "name": "BIO kiwi kus (cca 80g)",
+    "slug": "bio-kiwi-kus-cca-80g",
+    "brand": null,
+    "countryOfOriginFlagIconPath": null,
+    "favorites": {
+      "canBeFavorite": true,
+      "favorite": false
+    },
+    "unit": "ks",
+    "textualAmount": "1 ks",
+    "weightedItem": false,
+    "badges": [
+      {
+        "position": "PRICE",
+        "type": null,
+        "slug": null,
+        "text": "-10 % pro vás",
+        "textColor": "#1C2529",
+        "backgroundColor": "#DDF4DE",
+        "link": null,
+        "icon": null,
+        "trailingIcon": null,
+        "trailingIconLabel": null,
+        "secondaryText": null
+      },
+      {
+        "position": "PRODUCT",
+        "type": "TAG_BASED_BADGE",
+        "slug": "bio",
+        "text": "BIO",
+        "textColor": "#185729",
+        "backgroundColor": "#DDF4DE",
+        "link": null,
+        "icon": null,
+        "trailingIcon": null,
+        "trailingIconLabel": null,
+        "secondaryText": null
+      }
+    ],
+    "prices": {
+      "originalPrice": 21.9,
+      "salePrice": 19.71,
+      "unitPrice": 19.71,
+      "saleId": 14912390,
+      "salePriceStyle": {
+        "textColor": "#1C2529",
+        "backgroundColor": "#DDF4DE"
+      },
+      "saleValidTill": null,
+      "saleText": "-10 % pro vás",
+      "currency": "CZK"
+    },
+    "stock": {
+      "maxAvailableAmount": 50,
+      "availabilityStatus": "AVAILABLE",
+      "availabilityReason": null,
+      "maxBasketAmountReason": "ALLOWED"
+    },
+    "tooltips": [
+      {
+        "type": "PRODUCT_EXTREME_WEIGHT",
+        "closable": true,
+        "triggerAmount": 60,
+        "size": null,
+        "message": "Prosím, zkontrolujte množství položek před dokončením objednávky.",
+        "actionable": false
+      }
+    ],
+    "ratings": [],
+    "type": "PRODUCT"
+  },
+  {
+    "productId": 1351143,
+    "image": {
+      "path": "https://cdn.rohlik.cz/images/grocery/products/1288587/1288587-1449142754.jpg",
+      "backgroundColor": "#F6F6F6"
+    },
+    "name": "Jablko Granny Smith 1 ks",
+    "slug": "jablko-granny-smith-1-ks",
+    "brand": null,
+    "countryOfOriginFlagIconPath": null,
+    "favorites": {
+      "canBeFavorite": true,
+      "favorite": false
+    },
+    "unit": "kg",
+    "textualAmount": "cca 160 g",
+    "weightedItem": true,
+    "badges": [
+      {
+        "position": "PRICE",
+        "type": null,
+        "slug": null,
+        "text": "-25 % do 1. 10.",
+        "textColor": "#1C2529",
+        "backgroundColor": "#FFF6C8",
+        "link": null,
+        "icon": null,
+        "trailingIcon": null,
+        "trailingIconLabel": null,
+        "secondaryText": null
+      }
+    ],
+    "prices": {
+      "originalPrice": 13.21,
+      "salePrice": 9.9,
+      "unitPrice": 62.17,
+      "saleId": 15268637,
+      "salePriceStyle": {
+        "textColor": "#1C2529",
+        "backgroundColor": "#FFE55A"
+      },
+      "saleValidTill": "2026-10-01T23:59:00+02:00",
+      "saleText": "-25 %",
+      "currency": "CZK"
+    },
+    "stock": {
+      "maxAvailableAmount": 50,
+      "availabilityStatus": "AVAILABLE",
+      "availabilityReason": null,
+      "maxBasketAmountReason": "ALLOWED"
+    },
+    "tooltips": [
+      {
+        "type": "PRODUCT_EXTREME_WEIGHT",
+        "closable": true,
+        "triggerAmount": 13,
+        "size": null,
+        "message": "Prosím, zkontrolujte množství položek před dokončením objednávky.",
+        "actionable": false
+      }
+    ],
+    "ratings": [],
+    "type": "PRODUCT"
+  },
+  {
+    "productId": 1349783,
+    "image": {
+      "path": "https://cdn.rohlik.cz/images/grocery/products/1325199/1325199-1498549310.jpg",
+      "backgroundColor": "#F6F6F6"
+    },
+    "name": "Cibule žlutá 1 ks",
+    "slug": "cibule-zluta-1-ks",
+    "brand": null,
+    "countryOfOriginFlagIconPath": null,
+    "favorites": {
+      "canBeFavorite": true,
+      "favorite": false
+    },
+    "unit": "kg",
+    "textualAmount": "cca 100 g",
+    "weightedItem": true,
+    "badges": [
+      {
+        "position": "PRODUCT",
+        "type": "TAG_BASED_BADGE",
+        "slug": "best-buy",
+        "text": "Denní kontrola cen",
+        "textColor": "#FFFFFF",
+        "backgroundColor": "#E16E64",
+        "link": null,
+        "icon": null,
+        "trailingIcon": null,
+        "trailingIconLabel": null,
+        "secondaryText": null
+      }
+    ],
+    "prices": {
+      "originalPrice": 2.19,
+      "salePrice": null,
+      "unitPrice": 20.9,
+      "saleId": null,
+      "salePriceStyle": null,
+      "saleValidTill": null,
+      "saleText": null,
+      "currency": "CZK"
+    },
+    "stock": {
+      "maxAvailableAmount": 50,
+      "availabilityStatus": "AVAILABLE",
+      "availabilityReason": null,
+      "maxBasketAmountReason": "ALLOWED"
+    },
+    "tooltips": [
+      {
+        "type": "PRODUCT_EXTREME_WEIGHT",
+        "closable": true,
+        "triggerAmount": 35,
+        "size": null,
+        "message": "Prosím, zkontrolujte množství položek před dokončením objednávky.",
+        "actionable": false
+      }
+    ],
+    "ratings": [],
+    "type": "PRODUCT"
+  },
+  {
+    "productId": 1350467,
+    "image": {
+      "path": "https://cdn.rohlik.cz/images/grocery/products/1325993/1325993-1542963378.jpg",
+      "backgroundColor": "#F6F6F6"
+    },
+    "name": "Mrkev čerstvá praná 1 ks, volná",
+    "slug": "mrkev-cerstva-prana-1-ks-volna",
+    "brand": null,
+    "countryOfOriginFlagIconPath": null,
+    "favorites": {
+      "canBeFavorite": true,
+      "favorite": false
+    },
+    "unit": "kg",
+    "textualAmount": "cca 160 g",
+    "weightedItem": true,
+    "badges": [],
+    "prices": {
+      "originalPrice": 5.42,
+      "salePrice": null,
+      "unitPrice": 33.9,
+      "saleId": null,
+      "salePriceStyle": null,
+      "saleValidTill": null,
+      "saleText": null,
+      "currency": "CZK"
+    },
+    "stock": {
+      "maxAvailableAmount": 50,
+      "availabilityStatus": "AVAILABLE",
+      "availabilityReason": null,
+      "maxBasketAmountReason": "ALLOWED"
+    },
+    "tooltips": [
+      {
+        "type": "PRODUCT_EXTREME_WEIGHT",
+        "closable": true,
+        "triggerAmount": 18,
+        "size": null,
+        "message": "Prosím, zkontrolujte množství položek před dokončením objednávky.",
+        "actionable": false
+      }
+    ],
+    "ratings": [],
+    "type": "PRODUCT"
+  },
+  {
+    "productId": 1353155,
+    "image": {
+      "path": "https://cdn.rohlik.cz/images/grocery/products/1304049/1304049-1503317352.jpg",
+      "backgroundColor": "#F6F6F6"
+    },
+    "name": "Mandarinka TOP (odr. Nadorcott) 1 ks",
+    "slug": "mandarinka-top-odr-nadorcott-1-ks",
+    "brand": null,
+    "countryOfOriginFlagIconPath": null,
+    "favorites": {
+      "canBeFavorite": true,
+      "favorite": false
+    },
+    "unit": "kg",
+    "textualAmount": "cca 140 g",
+    "weightedItem": true,
+    "badges": [],
+    "prices": {
+      "originalPrice": 14.44,
+      "salePrice": null,
+      "unitPrice": 99.9,
+      "saleId": null,
+      "salePriceStyle": null,
+      "saleValidTill": null,
+      "saleText": null,
+      "currency": "CZK"
+    },
+    "stock": {
+      "maxAvailableAmount": 50,
+      "availabilityStatus": "AVAILABLE",
+      "availabilityReason": null,
+      "maxBasketAmountReason": "ALLOWED"
+    },
+    "tooltips": [],
+    "ratings": [],
+    "type": "PRODUCT"
+  }
+]

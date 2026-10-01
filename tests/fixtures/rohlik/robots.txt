@@ -1,0 +1,58 @@
+User-Agent: *
+Disallow: /regal/*
+
+User-agent: AhrefsBot
+Crawl-Delay: 20
+
+User-agent: YandexBot
+Crawl-Delay: 20
+
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: PetalBot
+Disallow: /
+
+User-agent: Googlebot
+Disallow: *?products=*
+Disallow: */sort/price-asc
+Disallow: */sort/price-desc
+Disallow: */sort/unit-price-asc
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Meta-ExternalAgent
+Allow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+Sitemap: https://www.rohlik.cz/sitemap.xml
