@@ -1,0 +1,1 @@
+"""Immutable offer schema revisions."""

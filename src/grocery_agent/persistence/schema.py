@@ -1,36 +1,18 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
     JSON,
     BigInteger,
-    DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy.types import TypeDecorator
 
-
-class UTCDateTime(TypeDecorator[datetime]):
-    """UTC storage for SQLite/PostgreSQL; naive domain timestamps are rejected."""
-
-    impl = DateTime
-    cache_ok = True
-
-    def process_bind_param(self, value: datetime | None, dialect: Dialect) -> datetime | None:
-        if value is None:
-            return None
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("timestamp must have a timezone")
-        return value.astimezone(UTC).replace(tzinfo=None)
-
-    def process_result_value(self, value: datetime | None, dialect: Dialect) -> datetime | None:
-        return value.replace(tzinfo=UTC) if value is not None else None
+from grocery_agent.persistence.types import UTCDateTime
 
 
 class Base(DeclarativeBase):

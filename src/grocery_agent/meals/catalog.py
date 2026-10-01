@@ -13,6 +13,7 @@ from grocery_agent.models.common import DomainModel, ExactDecimal, MoneyAmount, 
 
 Nonnegative = Annotated[ExactDecimal, Field(ge=0)]
 Positive = Annotated[ExactDecimal, Field(gt=0)]
+MealStyle = Literal["main", "breakfast", "snack"]
 
 
 class Nutrients(DomainModel):
@@ -71,6 +72,7 @@ class Ingredient(DomainModel):
 
 class Recipe(DomainModel):
     title: NonEmpty
+    meal_style: MealStyle = "main"
     minutes: int = Field(gt=0)
     # Raw purchased mass per serving; edible fractions account for vegetable trimming.
     grams: dict[str, Positive]
@@ -83,6 +85,7 @@ class MealPolicy(DomainModel):
     location_label: NonEmpty = "Praha"
     timezone: NonEmpty = "Europe/Prague"
     lactose_free: bool = True
+    meal_style: MealStyle = "main"
     servings: int = Field(default=1, ge=1, le=20)
     min_protein_g: Nonnegative = Decimal(70)
     max_kcal: Positive = Decimal(850)
@@ -105,13 +108,40 @@ class MealPolicy(DomainModel):
         return value
 
 
+class PantryItem(DomainModel):
+    # None explicitly means enough is already available for any suggested recipe.
+    grams: Positive | None = None
+    use_first: bool = False
+
+
+class Pantry(DomainModel):
+    items: dict[str, PantryItem] = Field(default_factory=dict)
+    seasonings_available: bool = False
+
+    def available_grams(self, ingredient_id: str, required: Decimal) -> Decimal:
+        item = self.items.get(ingredient_id)
+        if item is None:
+            return Decimal(0)
+        return required if item.grams is None else min(required, item.grams)
+
+
+class MealStyleDefaults(DomainModel):
+    min_protein_g: Nonnegative
+    max_kcal: Positive
+    max_cost_per_serving_czk: Positive
+
+
 class MealCatalog(DomainModel):
     policy: MealPolicy
+    pantry: Pantry = Field(default_factory=Pantry)
+    style_defaults: dict[MealStyle, MealStyleDefaults] = Field(default_factory=dict)
     ingredients: dict[str, Ingredient]
     recipes: tuple[Recipe, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
     def known_ingredients(self) -> Self:
+        if not self.pantry.items.keys() <= self.ingredients.keys():
+            raise ValueError("pantry ingredients must exist in the catalog")
         for recipe in self.recipes:
             if not recipe.grams or not recipe.grams.keys() <= self.ingredients.keys():
                 raise ValueError("recipe ingredients must exist in the catalog")

@@ -9,16 +9,19 @@ description = "Modular Czech grocery offer acquisition and price history"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+  "alembic>=1.16,<2",
   "beautifulsoup4>=4.13,<5",
   "lxml>=6,<7",
   "httpx>=0.28,<1",
   "pydantic>=2.12,<3",
   "pydantic-settings>=2.10,<3",
   "sqlalchemy>=2.0.44,<3",
+  "tzdata>=2025.2",
 ]
 
 [project.optional-dependencies]
 browser = ["playwright>=1.55,<2"]
+catalogue-api = ["fastapi>=0.116,<1", "uvicorn>=0.35,<1"]
 postgres = ["psycopg[binary]>=3.2,<4"]
 dev = ["pytest>=8.4,<10", "pytest-asyncio>=1.2,<2", "ruff>=0.14,<1", "mypy>=1.18,<2"]
 

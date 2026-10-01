@@ -1,5 +1,15 @@
 # Exact dependency versions verified on Python 3.14; used by CI on 3.13 and 3.14.
 # Regenerate in a clean project virtual environment after dependency updates.
+alembic==1.20.0
+annotated-doc==0.0.5
+click==8.5.0
+fastapi==0.142.2
+opentelemetry-api==1.45.0
+starlette==1.7.0
+tzdata==2026.4
+uvicorn==0.54.0
+Mako==1.4.3
+MarkupSafe==3.0.3
 Pygments==2.21.0
 SQLAlchemy==2.1.1
 annotated-types==0.8.0
