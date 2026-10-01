@@ -1,0 +1,11 @@
+User-agent: meta-externalagent
+Disallow: /
+
+User-agent: *
+Disallow: /backend/*
+Disallow: /orderfulfillment.uidispatcher.static/*
+Disallow: /shop/search?*
+Disallow: /shop/exlogin/*
+Disallow: /shop/portal/*
+
+Sitemap: https://sortiment.makro.cz/searchdiscover/sitemap/country/CZ/locale/cs-CZ/sitemap
