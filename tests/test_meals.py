@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from grocery_agent.cli.main import main
+from grocery_agent.cli.main import build_parser, main, pantry_overrides
 from grocery_agent.meals.catalog import MealCatalog, Nutrients
 from grocery_agent.meals.planner import MealReport, matches, plan_meals
 from grocery_agent.meals.report import render_html, save_failure, save_report
@@ -118,7 +118,7 @@ def test_loyalty_is_explicit_opt_in(catalog: MealCatalog, candidate: dict[str, A
 def test_plan_macros_prices_and_servings(catalog: MealCatalog, candidate: dict[str, Any]) -> None:
     report = plan_meals(MemoryReader(groceries(candidate)), catalog, NOW)
     meal = report.meals[0]
-    assert len(report.meals) == 3 and meal.stores == ("billa",)
+    assert len(report.meals) == 4 and meal.stores == ("billa",)
     assert meal.nutrients_per_serving.protein_g == Decimal("90.024")
     assert meal.nutrients_per_serving.kcal == Decimal("708.06")
     assert meal.nutrients_per_serving.fat_g == Decimal("15.002")
@@ -127,6 +127,205 @@ def test_plan_macros_prices_and_servings(catalog: MealCatalog, candidate: dict[s
     assert doubled.meals[0].nutrients_per_serving == meal.nutrients_per_serving
     assert doubled.meals[0].usage_cost_per_serving_czk == meal.usage_cost_per_serving_czk
     assert doubled.meals[0].lines[0].purchased_grams == Decimal(600)
+
+
+def with_pantry(catalog: MealCatalog, **pantry: Any) -> MealCatalog:
+    payload = catalog.model_dump(mode="json")
+    payload["pantry"] = pantry
+    return MealCatalog.model_validate(payload)
+
+
+def test_owned_chicken_and_rice_need_only_sides(
+    catalog: MealCatalog, candidate: dict[str, Any]
+) -> None:
+    stock = with_pantry(
+        catalog,
+        items={"chicken": {"grams": "2000"}, "rice": {"grams": "5000"}, "oil": {}},
+        seasonings_available=True,
+    )
+    # No eligible chicken or rice quote is needed when the portion is already owned.
+    rows = [row for row in groceries(candidate) if row.offer.product.sku in {"carrot", "onion"}]
+    report = plan_meals(MemoryReader(rows), stock, NOW)
+    assert len(report.meals) == 1
+    meal = report.meals[0]
+    assert meal.title == "Cumin chicken with rice and roasted carrots"
+    assert meal.usage_cost_per_serving_czk == Decimal("3.40")
+    assert meal.nutrients_per_serving.protein_g == Decimal("75.304")
+    lines = {line.price.ingredient_id: line for line in meal.lines}
+    assert lines["chicken"].owned_grams == Decimal(300)
+    assert lines["rice"].owned_grams == Decimal(70)
+    assert lines["chicken"].purchased_grams == lines["rice"].purchased_grams == 0
+    assert lines["chicken"].usage_cost_czk == 0
+    assert lines["carrot"].purchased_grams == Decimal(200)
+    assert report.pantry == stock.pantry
+    rendered = render_html(report, stock)
+    assert "Already have" in rendered and "Already owned" in rendered
+    assert "Seasonings already available: 0.00 Kč" in rendered
+    assert "not a combined shopping plan" in rendered
+
+
+def test_stock_shortfall_scales_across_servings(
+    catalog: MealCatalog, candidate: dict[str, Any]
+) -> None:
+    stock = with_pantry(
+        configured(catalog, servings=2),
+        items={"chicken": {"grams": "400"}, "oil": {"grams": "5"}},
+    )
+    report = plan_meals(MemoryReader(groceries(candidate)), stock, NOW)
+    smoky = next(meal for meal in report.meals if meal.title.startswith("Smoky"))
+    lines = {line.price.ingredient_id: line for line in smoky.lines}
+    chicken = lines["chicken"]
+    assert (chicken.required_grams, chicken.owned_grams, chicken.purchased_grams) == (
+        Decimal(600),
+        Decimal(400),
+        Decimal(200),
+    )
+    assert chicken.usage_cost_czk == Decimal("20.00")
+    assert lines["oil"].purchased_grams == Decimal(15)
+    assert lines["oil"].usage_cost_czk == Decimal("3.00")
+    assert smoky.usage_cost_per_serving_czk == Decimal("22.70")
+    assert smoky.nutrients_per_serving.protein_g == Decimal("90.024")
+    # Every displayed dish independently starts with the same stock.
+    assert all(
+        line.owned_grams == Decimal(400)
+        for meal in report.meals
+        for line in meal.lines
+        if line.price.ingredient_id == "chicken"
+    )
+
+
+def test_insufficient_stock_without_offer_cannot_complete_recipe(
+    catalog: MealCatalog, candidate: dict[str, Any]
+) -> None:
+    stock = with_pantry(catalog, items={"chicken": {"grams": "100"}})
+    rows = groceries(candidate)[2:]
+    with pytest.raises(ValueError, match="no complete recipe"):
+        plan_meals(MemoryReader(rows), stock, NOW)
+
+
+def test_fully_owned_meal_costs_zero_and_round_trips(catalog: MealCatalog) -> None:
+    stock = with_pantry(
+        catalog, items={key: {} for key in catalog.ingredients}, seasonings_available=True
+    )
+    report = plan_meals(MemoryReader([]), stock, NOW)
+    assert len(report.meals) == 4
+    assert report.meals[0].nutrients_per_serving.protein_g == Decimal("90.024")
+    for meal in report.meals:
+        assert meal.usage_cost_per_serving_czk == 0
+        assert meal.protein_g_per_czk is None
+        assert not meal.stores
+        assert all(line.purchased_grams == line.usage_cost_czk == 0 for line in meal.lines)
+    encoded = report.model_dump_json(exclude_computed_fields=True)
+    assert "Infinity" not in encoded
+    assert MealReport.model_validate_json(encoded) == report
+    assert "No store trip needed" in render_html(report, stock)
+
+
+def test_free_meal_ranks_before_paid_meal(catalog: MealCatalog, candidate: dict[str, Any]) -> None:
+    stock = with_pantry(
+        catalog,
+        items={key: {} for key in ("chicken", "rice", "carrot", "onion", "oil")},
+        seasonings_available=True,
+    )
+    report = plan_meals(MemoryReader(groceries(candidate)), stock, NOW)
+    assert report.meals[0].title == "Cumin chicken with rice and roasted carrots"
+    assert report.meals[0].usage_cost_per_serving_czk == 0
+    assert any(meal.usage_cost_per_serving_czk > 0 for meal in report.meals[1:])
+
+
+@pytest.mark.parametrize("ranking", ["protein_per_czk", "protein"])
+def test_use_first_prioritizes_owned_food(
+    catalog: MealCatalog, candidate: dict[str, Any], ranking: str
+) -> None:
+    stock = with_pantry(
+        configured(catalog, ranking=ranking),
+        items={"turkey": {"grams": "100", "use_first": True}, "chicken": {}},
+    )
+    report = plan_meals(MemoryReader(groceries(candidate)), stock, NOW)
+    assert report.meals[0].title.startswith("Cumin turkey")
+    assert report.meals[0].use_first_grams == Decimal(100)
+    assert (
+        report.meals[0].nutrients_per_serving.protein_g
+        < report.meals[1].nutrients_per_serving.protein_g
+    )
+    assert "use-first stock, then" in render_html(report, stock)
+
+
+def test_owned_food_does_not_count_as_a_store(
+    catalog: MealCatalog, candidate: dict[str, Any]
+) -> None:
+    rows = groceries(candidate)
+    for index in (0, 1):
+        payload = rows[index].offer.model_dump(mode="json", exclude_computed_fields=True)
+        payload["product"]["store_id"] = "albert"
+        rows[index] = ObservedOffer(Offer.model_validate(payload), NOW)
+    stock = with_pantry(configured(catalog, max_stores=1), items={"chicken": {}})
+    report = plan_meals(MemoryReader(rows), stock, NOW)
+    assert all(meal.stores == ("billa",) for meal in report.meals)
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        {"unknown": {}},
+        {"rice": {"grams": "-1"}},
+        {"rice": {"grams": "0"}},
+        {"rice": {"grams": "NaN"}},
+    ],
+)
+def test_invalid_pantry_rejected(catalog: MealCatalog, items: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError):
+        with_pantry(catalog, items=items)
+
+
+def test_cli_pantry_overrides_are_temporary(catalog: MealCatalog) -> None:
+    args = build_parser().parse_args(
+        [
+            "meals",
+            "--have",
+            "rice=5kg",
+            "--have",
+            "chicken=2000g",
+            "--have",
+            "oil=available",
+            "--use-first",
+            "chicken",
+            "--have-seasonings",
+        ]
+    )
+    stock = pantry_overrides(catalog, args)
+    assert stock.pantry.items["rice"].grams == Decimal(5000)
+    assert stock.pantry.items["chicken"].grams == Decimal(2000)
+    assert stock.pantry.items["chicken"].use_first
+    assert stock.pantry.items["oil"].grams is None
+    assert stock.pantry.seasonings_available
+    assert not catalog.pantry.items and not catalog.pantry.seasonings_available
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--have", "unknown=5kg"],
+        ["--have", "rice=5"],
+        ["--have", "rice=0g"],
+        ["--have", "rice=-1kg"],
+        ["--have", "rice=NaNkg"],
+        ["--use-first", "chicken"],
+    ],
+)
+def test_invalid_cli_stock_fails_before_acquisition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, arguments: list[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GROCERY_MEAL_CONFIG", str(ROOT / "config/meals.toml"))
+    monkeypatch.setattr("grocery_agent.cli.main.configure_logging", lambda level: None)
+
+    async def unexpected(*args: Any) -> int:
+        pytest.fail("invalid pantry must be validated before acquisition")
+
+    monkeypatch.setattr("grocery_agent.application.services.AcquisitionService.acquire", unexpected)
+    assert main(["workflow", *arguments]) == 1
+    assert not (tmp_path / "data/reports/latest.json").exists()
 
 
 @pytest.mark.parametrize(
@@ -306,10 +505,10 @@ def test_cli_failed_workflow_is_observable(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setenv("GROCERY_MEAL_CONFIG", str(ROOT / "config/meals.toml"))
     monkeypatch.setattr("grocery_agent.cli.main.configure_logging", lambda level: None)
 
-    async def failed(*args: Any) -> int:
-        return 1
+    async def failed(*args: Any) -> ScrapeResult:
+        return ScrapeResult(source_id="kupi", status="failed", errors=1, finished_at=NOW)
 
-    monkeypatch.setattr("grocery_agent.cli.main.scrape_stores", failed)
+    monkeypatch.setattr("grocery_agent.application.services.AcquisitionService.acquire", failed)
     assert main(["workflow"]) == 1
     assert json.loads((tmp_path / "data/reports/latest.json").read_text())["status"] == "failed"
 
@@ -365,3 +564,25 @@ def test_complete_one_off_workflow_offline(
         report = MealReport.model_validate_json(lines[1])
         assert report.meals[0].nutrients_per_serving.protein_g == Decimal("90.024")
         assert (tmp_path / "data/reports/latest.html").is_file()
+    assert (
+        main(
+            [
+                "meals",
+                "--have",
+                "rice=5kg",
+                "--have",
+                "chicken=2kg",
+                "--have",
+                "oil=available",
+                "--use-first",
+                "chicken",
+                "--have-seasonings",
+            ]
+        )
+        == 0
+    )
+    report = MealReport.model_validate_json(capsys.readouterr().out)
+    assert report.meals[0].title == "Cumin chicken with rice and roasted carrots"
+    assert report.meals[0].usage_cost_per_serving_czk == Decimal("3.40")
+    assert report.pantry.items["rice"].grams == Decimal(5000)
+    assert "Already have" in (tmp_path / "data/reports/latest.html").read_text()

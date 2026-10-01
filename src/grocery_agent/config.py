@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     meal_config: Path = Path("config/meals.toml")
     report_dir: Path = Path("data/reports")
     lock_path: Path = Path("data/workflow.lock")
+    collector_config: Path = Path("config/collector.toml")
     http_timeout_seconds: float = Field(default=30, gt=0, le=300)
     user_agent: str = Field(default="grocery-agent/0.1", min_length=1)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"

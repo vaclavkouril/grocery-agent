@@ -7,6 +7,7 @@ scope = "kupi:locality:praha"
 location_label = "Praha"
 timezone = "Europe/Prague"
 lactose_free = true
+meal_style = "main"
 servings = 1
 min_protein_g = "70"
 max_kcal = "850"
@@ -19,6 +20,28 @@ max_stores = 2
 ranking = "protein_per_czk"
 # Oil and seasonings are explicitly estimated pantry costs, not scraped prices.
 seasoning_allowance_czk = "3"
+
+# Applied when a request changes style; explicit request limits take precedence.
+[style_defaults.breakfast]
+min_protein_g = "35"
+max_kcal = "650"
+max_cost_per_serving_czk = "80"
+
+[style_defaults.snack]
+min_protein_g = "25"
+max_kcal = "450"
+max_cost_per_serving_czk = "60"
+
+# Optional already-owned stock: uncomment and adjust to your actual inventory.
+# Omit grams only when you have enough for any suggested dish (e.g. basic staples).
+# [pantry]
+# seasonings_available = true
+# [pantry.items.rice]
+# grams = "5000"
+# [pantry.items.chicken]
+# grams = "2000"
+# use_first = true
+# [pantry.items.oil]
 
 [ingredients.chicken]
 label = "Skinless boneless chicken breast (raw)"
@@ -73,6 +96,14 @@ pantry_price_per_kg_czk = "200"
 nutrition_source = "https://www.nutridatabaze.cz/potraviny/?id=84"
 nutrients_per_100g_edible = {kcal="898", protein_g="0", carbs_g="0", fat_g="99.8"}
 
+[ingredients.oats]
+label = "Plain oat flakes (dry; generic nutrition estimate)"
+name_pattern = '^(?:ovesné vločky|vločky ovesné)(?:\s|$)'
+exclude_pattern = 'ochucen|hotov|mléčn|směs|čokol|ovoc|granola'
+lactose_free = true
+nutrition_source = "https://www.nutridatabaze.cz/potraviny/?id=188"
+nutrients_per_100g_edible = {kcal="353", protein_g="13.1", carbs_g="55.8", fat_g="5.8"}
+
 [[recipes]]
 title = "Smoky chicken with creamy red lentils and roasted carrots"
 minutes = 35
@@ -96,6 +127,17 @@ steps = [
 ]
 
 [[recipes]]
+title = "Cumin chicken with rice and roasted carrots"
+minutes = 35
+grams = {chicken="300", rice="70", carrot="200", onion="50", oil="10"}
+steps = [
+  "Cook the dry white rice in water according to its packet instructions. Peel and chop the vegetables.",
+  "Roast the carrots and onion at 210 °C with half the oil, cumin, pepper and salt until tender.",
+  "Slice plain chicken breast and season it with paprika and cumin. Brown in the remaining oil and cook through.",
+  "Serve the chicken over rice with the roasted vegetables. Use dairy-free seasoning blends; no butter, cream or cheese.",
+]
+
+[[recipes]]
 title = "Cumin turkey with rice and roasted carrots"
 minutes = 35
 grams = {turkey="300", rice="70", carrot="200", onion="50", oil="10"}
@@ -104,4 +146,49 @@ steps = [
   "Roast the carrots and onion at 210 °C with half the oil, cumin, pepper and salt until tender.",
   "Slice plain turkey breast and season it with paprika and cumin. Brown in the remaining oil and cook through.",
   "Serve the turkey over rice with the roasted vegetables. Use dairy-free seasoning blends; no butter, cream or cheese.",
+]
+
+[[recipes]]
+title = "Savory chicken oat porridge"
+meal_style = "breakfast"
+minutes = 20
+grams = {chicken="160", oats="50", carrot="80", onion="30", oil="5"}
+steps = [
+  "Peel and grate the carrot and chop the onion. Slice plain chicken breast into thin strips.",
+  "Soften the onion and carrot in the oil, add the chicken and cook through with salt, pepper and paprika.",
+  "Stir in plain dry oat flakes and about 200 ml water per serving. Simmer until creamy, adding water as needed; use water rather than milk.",
+  "Serve as a savory breakfast bowl. Use dairy-free seasonings and no butter or cream.",
+]
+
+[[recipes]]
+title = "Chicken rice breakfast porridge"
+meal_style = "breakfast"
+minutes = 35
+grams = {chicken="160", rice="50", carrot="80", onion="30", oil="5"}
+steps = [
+  "Rinse the dry rice. Peel and grate the carrot and chop the onion.",
+  "Soften the vegetables in the oil. Add rice and about 350 ml water per serving, then simmer until the rice is very soft, adding water if needed.",
+  "Add thinly sliced plain chicken and cook through. Season the porridge with salt, pepper and cumin; use dairy-free seasonings.",
+]
+
+[[recipes]]
+title = "Paprika chicken bites with carrot sticks"
+meal_style = "snack"
+minutes = 15
+grams = {chicken="120", carrot="100", oil="5"}
+steps = [
+  "Peel the carrot and cut it into sticks. Cut plain chicken breast into bite-size pieces.",
+  "Coat the chicken in oil, paprika, salt and pepper. Cook through in a nonstick pan.",
+  "Serve the small chicken portion with crunchy carrot sticks, without dairy-based dips.",
+]
+
+[[recipes]]
+title = "Mini turkey patties with carrots"
+meal_style = "snack"
+minutes = 20
+grams = {turkey="150", carrot="100", onion="20", oil="5"}
+steps = [
+  "Finely chop plain turkey breast and peeled onion. Season with salt, pepper and cumin.",
+  "Shape small patties and cook through in the oil. Peel and slice the carrot while they cook.",
+  "Serve two or three mini patties with carrot sticks; the snack needs no cheese, butter or cream.",
 ]

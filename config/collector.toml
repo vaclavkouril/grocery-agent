@@ -1,0 +1,6 @@
+# Registered acquisition source IDs. Kupi defaults to all 13 food/drink categories.
+sources = ["kupi"]
+daily_at = "02:00"
+timezone = "Europe/Prague"
+# Populate a new installation immediately when its collector process is started.
+run_on_startup = true

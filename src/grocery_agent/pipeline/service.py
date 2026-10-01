@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from dataclasses import replace
+from uuid import UUID
 
 from pydantic import ValidationError
 
@@ -25,6 +26,8 @@ class ScrapePipeline:
 
     async def run(self, adapter: AcquisitionAdapter, context: AdapterContext) -> ScrapeResult:
         result = ScrapeResult(source_id=adapter.source_id)
+        if context.run_id is not None:
+            result.run_id = str(UUID(context.run_id))
         self.repository.start_run(result)
         logger.info("scrape_started", extra={"fields": result.as_dict()})
         try:

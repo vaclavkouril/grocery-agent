@@ -4,13 +4,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from grocery_agent.application.commands import MealCommand
+from grocery_agent.application.reports import FileMealReportStore
+from grocery_agent.application.runtime import run_meals
 from grocery_agent.config import Settings
 from grocery_agent.meals.catalog import MealCatalog
-from grocery_agent.meals.planner import MealReport, plan_meals
-from grocery_agent.meals.report import save_report
-from grocery_agent.models.common import utc_now
-from grocery_agent.persistence.database import open_database
-from grocery_agent.persistence.reader import SQLAlchemyCurrentOfferReader
+from grocery_agent.meals.planner import MealReport
+from grocery_agent.models.common import utc_now as utc_now
 
 
 @contextmanager
@@ -29,23 +29,16 @@ def writer_lock(path: Path) -> Iterator[None]:
 
 
 def generate_meals(settings: Settings, catalog: MealCatalog) -> MealReport:
-    engine = open_database(settings.database_url)
-    try:
-        report = plan_meals(SQLAlchemyCurrentOfferReader(engine), catalog, utc_now())
-        save_report(settings.report_dir, report, catalog)
-        logging.getLogger(__name__).info(
-            "meal_report_finished",
-            extra={
-                "fields": {
-                    "run_id": report.run_id,
-                    "meals": len(report.meals),
-                    "location": report.policy.location_label,
-                    "report": str(settings.report_dir / "latest.html"),
-                    "top_protein_g": str(report.meals[0].nutrients_per_serving.protein_g),
-                    "top_cost_czk": str(report.meals[0].usage_cost_per_serving_czk),
-                }
-            },
-        )
-        return report
-    finally:
-        engine.dispose()
+    execution = run_meals(settings, catalog, MealCommand(), utc_now)
+    artifacts = FileMealReportStore(settings.report_dir).save(execution, publish_latest=True)
+    logging.getLogger(__name__).info(
+        "meal_report_saved",
+        extra={
+            "fields": {
+                "request_id": str(execution.request_id),
+                "run_id": execution.report.run_id,
+                "report": str(artifacts.html_path),
+            }
+        },
+    )
+    return execution.report
