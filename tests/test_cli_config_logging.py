@@ -19,7 +19,7 @@ def preserve_pytest_logging(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_store_listing(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["stores"]) == 0
-    assert capsys.readouterr().out.strip() == "kupi\nmock"
+    assert capsys.readouterr().out.strip() == "kupi\nmakro\nmock\nrohlik\ntesco"
 
 
 @pytest.mark.parametrize(

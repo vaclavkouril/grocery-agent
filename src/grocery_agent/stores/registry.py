@@ -30,9 +30,15 @@ class StoreRegistry:
 
 def default_registry() -> StoreRegistry:
     from grocery_agent.stores.kupi.adapter import KupiAdapter
+    from grocery_agent.stores.makro.adapter import MakroAdapter
     from grocery_agent.stores.mock.adapter import MockStore
+    from grocery_agent.stores.rohlik.adapter import RohlikAdapter
+    from grocery_agent.stores.tesco.adapter import TescoAdapter
 
     registry = StoreRegistry()
     registry.register("mock", MockStore)
     registry.register("kupi", KupiAdapter)
+    registry.register("makro", MakroAdapter)
+    registry.register("rohlik", RohlikAdapter)
+    registry.register("tesco", TescoAdapter)
     return registry

@@ -1,6 +1,6 @@
 # Grocery Agent
 
-Collect Czech grocery offers from Kupi, keep price history, and create local
+Collect Czech grocery offers from Kupi and direct retailer catalogs, keep price history, and create local
 protein-focused meal reports.
 
 ## Requirements
@@ -90,3 +90,44 @@ The API is at `http://127.0.0.1:8000/docs`. Data persists in a named volume. Edi
 See [collector, cache and Docker usage](docs/catalogue.md) for expiry, configuration and backups.
 
 See [usage and troubleshooting](docs/usage.md) or [development](development.md).
+
+## Rohlík online prices
+
+Collect Rohlík's public online catalog for future store comparisons:
+
+```sh
+.venv/bin/grocery-agent scrape rohlik
+```
+
+The default covers eleven food/drink categories and retains pack sizes, prices per kg/l,
+stock, conditional discounts and the displayed warehouse/locality. See
+[Rohlík configuration and price mapping](docs/rohlik.md) for focused category selection.
+The meal workflow continues to use its configured source, Kupi by default.
+
+## Tesco online catalog
+
+The direct Tesco adapter traverses ordinary online departments and preserves standard prices,
+pack sizes and separate Clubcard prices:
+
+```sh
+.venv/bin/grocery-agent scrape tesco
+```
+
+It requires the browser extra and Chromium. Live verification read the first produce page,
+but Tesco denied page two, so a complete catalog is currently blocked on this machine. See
+[Tesco setup, pickup scope and access limits](docs/tesco.md) before relying on a run's coverage.
+
+## Makro branch assortment
+
+Makro requires a customer login for prices. Save a local browser session, then collect the
+selected branch's ordinary assortment:
+
+```sh
+.venv/bin/python -m grocery_agent.stores.makro.login
+.venv/bin/grocery-agent scrape makro
+```
+
+Prices use the quoted VAT-inclusive whole package. Purchase terms expose minimum quantities,
+pack increments, and known deposits/fees; unknown charges or estimated weights do not produce
+a guaranteed checkout total. Live authenticated pricing still needs verification after login.
+See [Makro setup and minimum purchase costs](docs/makro.md).

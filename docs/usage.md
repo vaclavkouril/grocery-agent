@@ -8,6 +8,7 @@
 | A checkout of this repository | Supplies the source, fixture data and `config/meals.toml` |
 | Installed Python dependencies | HTTP, HTML parsing, validation and SQLite persistence |
 | Internet access to `https://www.kupi.cz` | Collect fresh offers; generating meals from fresh saved data works offline |
+| Internet access to `https://www.rohlik.cz` for `scrape rohlik` | Collect public online catalog prices |
 | Write access to the project data directory | Store the database, raw snapshots, lock file and reports |
 | A browser | Read the local HTML recipe report |
 
@@ -43,6 +44,11 @@ if you customize the acquisition settings. `.env` and runtime data are ignored b
 
 Run all examples from the **repository root**. Relative configuration and data paths use the
 working directory, not the location of the installed executable.
+
+Makro's direct branch assortment needs a customer login. After creating an account, run
+`.venv/bin/python -m grocery_agent.stores.makro.login`, select a branch in the browser, then
+`.venv/bin/grocery-agent scrape makro`. See [Makro setup and minimum purchase costs](makro.md)
+for VAT-inclusive pack prices, deposits, fee uncertainty and current verification limits.
 
 ## Recommended one-off meal run
 
@@ -87,13 +93,25 @@ select different offers, stores or recipes. Whole-pack checkout costs may be hig
 
 ## Other commands
 
-Meal reports use one configured source; the default remains Kupi.
+Rohlík is available with `.venv/bin/grocery-agent scrape rohlik`. It covers eleven food/drink
+categories by default, with pack sizes, normalized prices and warehouse/locality scope for
+future comparisons. Use `GROCERY_ROHLIK_CATEGORY_IDS='[300102000]'` for produce only. See
+[Rohlík acquisition](rohlik.md) for configuration, conditional discounts and location limits.
+`scrape --all` includes Kupi, Makro, MockStore, Rohlík and Tesco. Makro requires a saved customer
+login session. Tesco needs the optional browser extra
+and Chromium; its default visible browser needs a graphical session. Tesco currently denies
+live pagination on this machine, so review [Tesco access limits](tesco.md).
+Meal reports use one configured source;
+their default remains Kupi.
 
 | Command (after `.venv/bin/grocery-agent`) | Behavior |
 | --- | --- |
-| `stores` | List acquisition sources: `kupi`, `mock` |
+| `stores` | List acquisition sources: `kupi`, `makro`, `mock`, `rohlik`, `tesco` |
 | `workflow` | Acquire the meal profile's source, validate/persist, then generate meals |
 | `scrape kupi` | Acquire and persist Kupi offers; does not generate a meal report |
+| `scrape rohlik` | Acquire ordinary Rohlík online catalog prices |
+| `scrape tesco` | Traverse ordinary Tesco online departments with an isolated browser; currently blocked by live pagination denial |
+| `scrape makro` | Collect customer-scoped branch assortment using a saved login session and VAT-inclusive pack prices |
 | `meals` | Generate meals from the latest complete, fresh saved Kupi batch; no network requests |
 | `meals --meal-style breakfast` / `meals --meal-style snack` | Select an optional meal style; main remains the default |
 | `meals --no-latest` | Save an isolated request without updating local `latest` aliases |
@@ -108,7 +126,10 @@ Meal reports use one configured source; the default remains Kupi.
 | `scrape mock` | Exercise fixture acquisition and persistence offline; does not provide real prices |
 | `scrape --all` | Acquire all registered sources, including the mock; does not generate meals |
 
-The aggregator source is `kupi`, even when an offer is sold by Billa, Albert or Tesco.
+The aggregator source is `kupi`, even when an offer is sold by Billa, Albert or Tesco. Direct
+retailer sources `rohlik`, `tesco` and `makro` acquire their catalogs separately and retain their own
+catalog coverage scope.
+
 With no category or listing override, `workflow` and `scrape kupi` cover **13 categories**.
 The verified full run took about **19 minutes**. Use:
 

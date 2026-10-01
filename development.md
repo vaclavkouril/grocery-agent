@@ -6,13 +6,24 @@ Grocery Agent collects Czech grocery offers and keeps auditable price history. A
 adapters emit one canonical schema; validation, persistence, matching and meal planning operate
 without retailer-specific branches.
 
-The current project includes an offline MockStore and Kupi acquisition across 13 grocery
-categories and multiple retailers. These are advertised promotions with locality, validity and
-loyalty conditions. The meal planner uses curated ingredient nutrition and eight fixed recipes:
-four main dishes, two breakfasts and two snacks. Main dishes remain the default. Account-independent
-services, independent migrations, an expiry-aware catalogue, private read API and scheduled
-collector are implemented. Further acquisition coverage, fuzzy matching, general optimization
-and agents remain future work.
+The current project includes an offline MockStore, Kupi acquisition across 13 grocery categories
+and multiple retailers, and a direct Rohlík adapter covering eleven public online food/drink
+categories. Kupi supplies advertised promotions with locality, validity and loyalty conditions;
+Rohlík also supplies ordinary online catalog prices, pack quantities and stock. The meal planner
+uses curated ingredient nutrition and eight fixed recipes: four main dishes, two breakfasts and
+two snacks. Main dishes remain the default. Account-independent application services, independent
+migrations, an expiry-aware persisted catalogue, optional read API and scheduled collector are
+implemented. Additional acquisition coverage, fuzzy matching, general optimization and agents
+remain future work.
+
+The direct Tesco adapter reads ordinary online department listings with an isolated Chromium
+browser and the existing optional browser extra. It handles standard and Clubcard variants,
+mass quotes, pack quantities and coverage checks. Live pagination is currently blocked by Tesco
+access denial; see [Tesco acquisition and verification limits](docs/tesco.md).
+
+The Makro adapter uses a saved customer login and selected branch, with explicit VAT-inclusive
+purchase terms. Authenticated price markup and complete live acquisition remain unverified;
+see [Makro setup and limits](docs/makro.md).
 
 ## Development environment
 
@@ -42,14 +53,19 @@ optional extras; install them when an adapter or deployment requires them.
 Normal tests use saved fixtures and temporary databases and forbid live network access. Optional
 network tests belong under the `live` marker. GitHub Actions runs linting, formatting, type
 checking and offline tests on Python 3.13 and 3.14. The implementation verification on
-2026-10-01 passed 402 tests plus Ruff and mypy; that count is a dated result. Docker is absent on
+2026-10-01 passed 441 offline tests, Ruff lint/format checks and mypy (89 source files).
+These counts are a dated result. Docker is absent on
 this machine, so local image execution remains unverified; CI includes Docker build/smoke checks.
 
 ## Architecture and contracts
 
+- [Compact project context and handoff](docs/context.md)
 - [Architecture and database schema](docs/architecture.md)
 - [Acquisition adapter contract](docs/adapter-contract.md)
 - [Kupi parsing, source mapping and verification](docs/kupi.md)
+- [Rohlík online catalog, source mapping and configuration](docs/rohlik.md)
+- [Tesco online catalog, browser setup and access limits](docs/tesco.md)
+- [Makro login, branch scope and minimum purchase costs](docs/makro.md)
 - [Meal planning, pricing and nutrition assumptions](docs/meals.md)
 - [Runtime configuration and troubleshooting](docs/usage.md)
 - [Proposed server UI, multi-user controls, email and SimpleX plan](docs/server-access-plan.md)

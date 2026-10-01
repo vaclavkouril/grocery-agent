@@ -42,6 +42,10 @@ is async and streamed. SQLite transactions are synchronous and short (one accept
 This is suitable for a single daily local job, but SQL calls block the loop briefly. A future async
 repository can replace this implementation when measured throughput or concurrency requires it.
 
+The direct [Rohlík adapter](rohlik.md) reads anonymous public catalog context and paginated product
+card JSON. It retains warehouse/locality scope, distinguishes conditional prices and quotes
+variable-weight products per kg. Acquisition sources share the public robots policy parser.
+
 ## Domain
 
 | Concept | Responsibility |

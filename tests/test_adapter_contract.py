@@ -13,10 +13,18 @@ from grocery_agent.stores.registry import StoreRegistry, default_registry
 from tests.adapter_contract import assert_adapter_contract
 from tests.kupi_support import FETCHED_AT, fixture_response
 from tests.kupi_support import adapter as kupi_adapter
+from tests.makro_support import adapter as makro_adapter
+from tests.rohlik_support import adapter as rohlik_adapter
+from tests.rohlik_support import fixture_response as rohlik_response
+from tests.tesco_support import adapter as tesco_adapter
+from tests.tesco_support import fixture_response as tesco_response
 
 CONTRACT_CASES: dict[str, tuple[Callable[[], AcquisitionAdapter], int]] = {
     "mock": (MockStore, 5),
     "kupi": (kupi_adapter, 90),
+    "makro": (makro_adapter, 4),
+    "rohlik": (rohlik_adapter, 9),
+    "tesco": (tesco_adapter, 28),
 }
 
 
@@ -27,7 +35,11 @@ async def test_adapter_contract(store_id: str, monkeypatch: pytest.MonkeyPatch) 
     def unexpected_http(request: httpx.Request) -> httpx.Response:
         raise AssertionError(f"unexpected HTTP call: {request.url}")
 
-    transport = fixture_response if store_id == "kupi" else unexpected_http
+    transport = {
+        "kupi": fixture_response,
+        "rohlik": rohlik_response,
+        "tesco": tesco_response,
+    }.get(store_id, unexpected_http)
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
         factory, count = CONTRACT_CASES[store_id]
         await assert_adapter_contract(factory, AdapterContext(client), expected_count=count)
