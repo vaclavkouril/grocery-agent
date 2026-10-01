@@ -8,9 +8,11 @@ without retailer-specific branches.
 
 The current project includes an offline MockStore and Kupi acquisition across 13 grocery
 categories and multiple retailers. These are advertised promotions with locality, validity and
-loyalty conditions, rather than complete retailer inventories. The meal planner uses curated
-ingredient nutrition and three fixed recipes. Direct retailer adapters, fuzzy matching, general
-shopping optimization, agents and scheduling remain future work.
+loyalty conditions. The meal planner uses curated ingredient nutrition and eight fixed recipes:
+four main dishes, two breakfasts and two snacks. Main dishes remain the default. Account-independent
+services, independent migrations, an expiry-aware catalogue, private read API and scheduled
+collector are implemented. Further acquisition coverage, fuzzy matching, general optimization
+and agents remain future work.
 
 ## Development environment
 
@@ -23,8 +25,9 @@ python3 -m venv .venv
 .venv/bin/python -m pip install --no-deps --no-build-isolation -e .
 ```
 
-The runtime dependencies include HTTP acquisition, HTML parsing, Pydantic validation and
-SQLAlchemy persistence. Browser automation (`.[browser]`) and PostgreSQL (`.[postgres]`) are
+The runtime dependencies include HTTP acquisition, HTML parsing, Pydantic validation, Alembic
+migrations, timezone data and SQLAlchemy persistence. The private catalogue API (`.[catalogue-api]`),
+browser automation (`.[browser]`) and PostgreSQL (`.[postgres]`) are
 optional extras; install them when an adapter or deployment requires them.
 
 ## Checks
@@ -39,7 +42,8 @@ optional extras; install them when an adapter or deployment requires them.
 Normal tests use saved fixtures and temporary databases and forbid live network access. Optional
 network tests belong under the `live` marker. GitHub Actions runs linting, formatting, type
 checking and offline tests on Python 3.13 and 3.14. The implementation verification on
-2026-10-01 passed 234 tests plus Ruff and mypy; that count is a dated result.
+2026-10-01 passed 402 tests plus Ruff and mypy; that count is a dated result. Docker is absent on
+this machine, so local image execution remains unverified; CI includes Docker build/smoke checks.
 
 ## Architecture and contracts
 
@@ -48,6 +52,9 @@ checking and offline tests on Python 3.13 and 3.14. The implementation verificat
 - [Kupi parsing, source mapping and verification](docs/kupi.md)
 - [Meal planning, pricing and nutrition assumptions](docs/meals.md)
 - [Runtime configuration and troubleshooting](docs/usage.md)
+- [Proposed server UI, multi-user controls, email and SimpleX plan](docs/server-access-plan.md)
+- [Implemented phase 1 services, commands and separate databases](docs/phase-one.md)
+- [Collector, catalogue API, cache policy and Docker](docs/catalogue.md)
 
 Acquisition is streamed through `AcquisitionAdapter`; single-retailer adapters use its
 `StoreAdapter` specialization. Adapters supply canonical candidates and source evidence and
@@ -88,9 +95,11 @@ Settings use `GROCERY_` environment variables or `.env`, with environment variab
 precedence. Paths resolve from the process working directory. Runtime data, environments and
 caches are ignored by Git.
 
-CLI writers share an advisory process lock. Embedded pipeline users must coordinate the same
-lock. SQLite transactions are short and synchronous; use one writer process. Schema creation
-bootstraps the database; introduce migrations before changing a deployed SQL schema.
+CLI acquisitions, collector rounds and migrations share an advisory process lock. Embedded
+pipeline users must coordinate the same lock. SQLite uses WAL, explicit transactions and a busy
+timeout. Use one acquisition writer process. Meal services read pinned history/cache independently;
+`meals --no-latest` saves isolated reports while collection is running. Readers never migrate.
+Offer writers upgrade through the offers Alembic history; control migrations remain explicit.
 
 The database is created automatically. Raw snapshots are content-addressed files under
 `data/snapshots`; back up the database and snapshots together while the writer is stopped.
@@ -98,8 +107,10 @@ JSON logs go to stderr and CLI summaries to stdout. Failed, partial and empty ru
 Run counters and retained source evidence support debugging and future coverage monitoring.
 
 Abrupt termination can leave a run marked `running`; accepted item transactions survive.
-Cancellation handled by the process marks the run `cancelled`. Automatic stale-run recovery,
-snapshot retention and scheduling remain deferred. See [usage](docs/usage.md) for recovery steps.
+Cancellation handled by the process marks the run `cancelled`. Automatic stale-run recovery and
+snapshot retention remain deferred. Scheduling is available through the independent collector,
+but no process or OS timer was activated during implementation. See [usage](docs/usage.md) and
+[catalogue operations](docs/catalogue.md) for recovery and manual deployment steps.
 
 ## GitHub setup
 

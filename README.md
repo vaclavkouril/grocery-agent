@@ -1,6 +1,7 @@
 # Grocery Agent
 
-Collect Czech grocery offers from Kupi and create local protein-focused meal reports.
+Collect Czech grocery offers from Kupi, keep price history, and create local
+protein-focused meal reports.
 
 ## Requirements
 
@@ -9,6 +10,7 @@ Collect Czech grocery offers from Kupi and create local protein-focused meal rep
 - A browser to open the HTML report.
 
 Dependencies are installed below. SQLite is created automatically; no API keys are needed.
+Docker deployments also need Docker Engine and Compose v2.
 
 ## Install
 
@@ -44,6 +46,47 @@ For all 13 categories, run `.venv/bin/grocery-agent workflow` without category/l
 
 The default meal profile is Praha, lactose-free, one serving. Edit [config/meals.toml](config/meals.toml)
 to change preferences. Reports are written to `data/reports/latest.html` and `latest.json`.
-Commands run once; no timer is installed.
+Meal and scrape commands run once; no timer is installed.
+
+Use food you already own at zero purchase cost, and buy only the missing quantities:
+
+```sh
+.venv/bin/grocery-agent meals --have rice=5kg --have chicken=2kg \
+  --have oil=available --have-seasonings --use-first chicken
+```
+
+These options also work with `workflow`. The report separates quantities to use, already owned,
+and to buy. Save recurring pantry choices in `config/meals.toml`; see [pantry setup](docs/usage.md#food-you-already-have).
+
+Main dishes are the default. Select a smaller meal style and optionally change its limits:
+
+```sh
+.venv/bin/grocery-agent meals --meal-style breakfast --have oats=1kg
+.venv/bin/grocery-agent meals --meal-style snack --min-protein 30 --budget 60
+.venv/bin/grocery-agent command 'meal meal_style=snack have=chicken=2kg min_protein_g=30'
+```
+
+Each successful request also saves an isolated report under `data/reports/requests/`.
+Add `--no-latest` to leave the local `latest` shortcuts alone. No user accounts are required.
+
+## Docker collector and catalogue
+
+Build and collect once:
+
+```sh
+docker compose build
+docker compose run --rm cli collector --once
+docker compose run --rm cli catalogue kupi --unit kg --sort unit_price
+```
+
+For daily collection at 02:00 Europe/Prague and a private catalogue API:
+
+```sh
+docker compose up -d collector catalogue-api
+```
+
+The API is at `http://127.0.0.1:8000/docs`. Data persists in a named volume. Edit
+`config/collector.toml` or the documented environment overrides before starting it.
+See [collector, cache and Docker usage](docs/catalogue.md) for expiry, configuration and backups.
 
 See [usage and troubleshooting](docs/usage.md) or [development](development.md).

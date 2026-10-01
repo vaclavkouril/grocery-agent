@@ -1,0 +1,62 @@
+name: grocery-agent
+
+x-runtime: &runtime
+  build: .
+  image: grocery-agent:local
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp
+  volumes:
+    - grocery-data:/var/lib/grocery-agent
+    - ./config:/app/config:ro
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+x-environment: &environment
+  GROCERY_CATALOGUE_MAX_AGE_HOURS: ${GROCERY_CATALOGUE_MAX_AGE_HOURS:-36}
+  GROCERY_CATALOGUE_TIMEZONE: ${GROCERY_CATALOGUE_TIMEZONE:-Europe/Prague}
+  GROCERY_CATALOGUE_ALLOW_CACHED_ON_FAILURE: ${GROCERY_CATALOGUE_ALLOW_CACHED_ON_FAILURE:-true}
+  GROCERY_LOG_LEVEL: ${GROCERY_LOG_LEVEL:-INFO}
+
+services:
+  collector:
+    <<: *runtime
+    command: [collector]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      <<: *environment
+      GROCERY_COLLECTOR_DAILY_AT: ${GROCERY_COLLECTOR_DAILY_AT:-02:00}
+      GROCERY_COLLECTOR_TIMEZONE: ${GROCERY_COLLECTOR_TIMEZONE:-Europe/Prague}
+      GROCERY_COLLECTOR_RUN_ON_STARTUP: ${GROCERY_COLLECTOR_RUN_ON_STARTUP:-true}
+      GROCERY_HTTP_TIMEOUT_SECONDS: ${GROCERY_HTTP_TIMEOUT_SECONDS:-30}
+      GROCERY_USER_AGENT: ${GROCERY_USER_AGENT:-grocery-agent/0.1}
+      GROCERY_KUPI_MAX_PAGES: ${GROCERY_KUPI_MAX_PAGES:-100}
+      GROCERY_KUPI_REQUEST_DELAY_SECONDS: ${GROCERY_KUPI_REQUEST_DELAY_SECONDS:-1}
+      GROCERY_KUPI_ATTEMPTS: ${GROCERY_KUPI_ATTEMPTS:-3}
+
+  catalogue-api:
+    <<: *runtime
+    command: [serve-catalogue, --host, 0.0.0.0, --port, '8000']
+    restart: unless-stopped
+    environment: *environment
+    ports:
+      - '127.0.0.1:${GROCERY_CATALOGUE_PORT:-8000}:8000'
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  cli:
+    <<: *runtime
+    profiles: [tools]
+    command: [stores]
+    environment: *environment
+
+volumes:
+  grocery-data:

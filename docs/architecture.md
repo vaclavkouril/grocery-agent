@@ -10,6 +10,10 @@ flowchart TD
     Resolve --> Repo[OfferRepository]
     Repo --> SQL[SQLAlchemy: SQLite initially]
     SQL --> Reader[CurrentOfferReader: complete batch]
+    SQL --> Publish[Complete batch publisher]
+    Publish --> Cache[Indexed catalogue: freshness and offer expiry]
+    Cache --> API[Private read-only HTTP interface]
+    Cache --> Reader
     Reader --> Meals[Meal planner: configuration + ingredient nutrition]
     Meals --> Reports[Local HTML / JSON reports]
     SQL --> Future[Future matching / analytics / optimizer / agents]
@@ -25,6 +29,12 @@ implements SQLAlchemy and file snapshots. `cli/` composes the services. No retai
 outside adapters. `meals/` consumes canonical offers through a read protocol and uses curated
 ingredient data and fixed recipes; it is independent of acquisition and exact identity matching.
 General analytics and optimization remain deferred. See [meal workflow](meals.md).
+
+`application/` supplies typed commands, shared parameter/pantry resolution, reusable acquisition
+and planning services and isolated report publication. `collector/` composes acquisition on its
+own schedule. `catalogue/` publishes complete canonical batches and serves bounded indexed queries.
+`persistence/control/` has its own base/schema and migrations; normal commands never open it.
+The user-facing controls follow the [recorded phase order](server-access-plan.md).
 
 Adapters use the injected `httpx.AsyncClient`; browser dependencies are optional. HTML parsing is
 included for the Kupi source. Acquisition
@@ -89,6 +99,13 @@ times are timezone-aware and stored in UTC. No midnight or timezone is guessed b
 | source_snapshots | UUID, run FK, hash/path metadata, URL, locator, fetch timestamp, raw metadata JSON |
 | scrape_runs | UUID, acquisition source, started/finished timestamps, status, fetched/accepted/rejected/changed/errors counters |
 | scrape_items | UUID, run FK, snapshot FK, nullable observation FK, status and diagnostic details |
+| catalogue_heads | Source primary key, published complete-run FK, publication time |
+| catalogue_entries | UUID, run/observation FKs, unique `(run_id, observation_id)`, canonical filter fields, exact integer unit price, observation time and validity dates |
+| offers_schema_version | Independent Alembic offer revision |
+
+Optional **separate** control storage contains `users`, versioned owner-linked `user_profiles`,
+and `control_schema_version`. Offer/run IDs crossing the database boundary are application
+references. Accounts, sessions and durable jobs remain phase 2; the schema is a foundation.
 
 Raw bytes are content-addressed SHA-256 files outside SQL. Each fetched item retains a separate
 provenance row, even if the content or business state is unchanged. Backups must include both stores.
@@ -112,8 +129,19 @@ level, while all received item evidence is preserved.
 Transactions atomically record each accepted observation and its provenance. Rejected records cannot
 create business rows. Source files may survive a failed SQL transaction as harmless orphan artifacts.
 SQLite foreign keys are enabled. Generic SQLAlchemy types/queries keep the schema PostgreSQL-portable;
-PostgreSQL support is not yet exercised. Use one writer process. Schema creation is bootstrapping,
-not migration management: introduce Alembic before changing a deployed schema.
+PostgreSQL support is not yet exercised. Use one acquisition writer process. Alembic safely adopts
+the exact unversioned seven-table baseline before adding the derived catalogue. Ordinary engine
+opening performs no schema writes; read roles use read-only connections and never migrate. See
+[migrations and request services](phase-one.md).
+
+Catalogue publication swaps its head and derived entries atomically only after a nonempty
+successful run. Replaced derived rows can be removed; history and raw evidence remain. Queries
+pin a repeatable SQLite read transaction and filter both observation age and local offer dates.
+After refresh failure the previous complete run remains usable within its configured deadline,
+with latest-attempt status and visible warnings. Stale cache is refused. The strict history reader
+still blocks unsuccessful latest runs; explicit successful run selection supports reproducibility.
+Meal types are retailer-independent recipe/parameter metadata; main, breakfast and snack share
+the same catalogue, pantry accounting and price/nutrient arithmetic.
 
 ## Failures and monitoring
 
@@ -135,7 +163,7 @@ counters become final at completion, while item-level commits are durable during
   transaction or encode weight rather than a reusable product.
 - Canonical catalog stewardship, merges/splits and later comparable-product groups.
 - SKU reuse and exact-match reassignment policies; missing GTIN currently preserves prior matches.
-- Raw-data retention/redaction policy, database migrations and embedded-writer locking.
-- Actual PostgreSQL validation and scheduling after the first retailer is reviewed.
+- Raw-data retention/redaction policy and embedded-writer coordination.
+- Actual PostgreSQL validation and Docker execution on the deployment host.
 - Ingredient matching coverage, actual label nutrition, pack-aware shopping totals, pantry inventory,
-  and extending the initial three recipes without confusing heuristic matches with product identity.
+  and extending the fixed recipes without confusing heuristic matches with product identity.
