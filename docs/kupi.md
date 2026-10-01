@@ -1,5 +1,7 @@
 # Kupi acquisition
 
+See [usage and requirements](usage.md) for installation and one-off acquisition-to-meal commands.
+
 ## Run
 
 ```sh

@@ -1,5 +1,8 @@
 # One-off protein meal workflow
 
+For prerequisites, installation, a focused acquisition command, configuration examples and
+troubleshooting, see [usage and requirements](usage.md).
+
 Run from the project root:
 
 ```sh

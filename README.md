@@ -5,7 +5,9 @@ Retailer adapters emit one canonical schema; validation, persistence, matching, 
 operate without retailer-specific branches. Includes an offline MockStore and a Kupi adapter
 collecting advertised offers from multiple retailers.
 
-See [architecture](docs/architecture.md) and the [adapter contract](docs/adapter-contract.md).
+Start with [usage and requirements](docs/usage.md) for installation, one-off runs, configuration,
+reports and troubleshooting. See [architecture](docs/architecture.md) and the
+[adapter contract](docs/adapter-contract.md) for implementation details.
 
 ## Setup
 
@@ -16,14 +18,15 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements-dev.lock
 python -m pip install --no-deps --no-build-isolation -e .
-cp .env.example .env
 grocery-agent stores
-grocery-agent scrape mock
-grocery-agent scrape kupi
-grocery-agent scrape --all
-grocery-agent runs --limit 10
-grocery-agent meals
+GROCERY_KUPI_CATEGORY_SLUGS='["maso-drubez-a-ryby","ovoce-a-zelenina","vareni-a-peceni"]' \
+  grocery-agent workflow
+xdg-open data/reports/latest.html
 ```
+
+Settings work without `.env`. To persist overrides, copy `.env.example` to `.env` once, preserving
+any existing configuration. An existing `GROCERY_KUPI_LISTING_URL` override takes precedence over
+the category list; remove it before using the meal-focused selection above.
 
 HTML parsing is included for Kupi. Browser automation (`.[browser]`) and PostgreSQL (`.[postgres]`)
 are optional extras. Install them when an adapter or deployment needs them.
@@ -60,6 +63,9 @@ remain future work. `--all` runs both registered sources, including the offline 
 `grocery-agent meals` generates a local HTML/JSON report from the latest complete, fresh offers.
 `grocery-agent workflow` scrapes the configured source and then generates the report in one run.
 No timer is activated. Open `data/reports/latest.html`; see [meal workflow](docs/meals.md).
+The quick-start category selection above took about four minutes in the verified run.
+With no category/listing override, `workflow` collects all 13 categories, taking about 19 minutes
+in the verified full run. `grocery-agent meals` reuses fresh saved data without another scrape.
 
 The initial profile is Praha, lactose-free, one large serving, at least 70 g protein, and up to two
 supermarket chains. Edit recipes, nutrition sources and limits in `config/meals.toml`. Cost estimates
