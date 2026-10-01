@@ -129,7 +129,6 @@ counters become final at completion, while item-level commits are durable during
 
 ## Review questions
 
-- License choice and copyright holder (MIT suggested).
 - Retailer/location/channel coverage and stable offer-key policies.
 - Promotion semantics for complex bundles, deposits and coupons; taxes/fees are not modeled yet.
 - Variable-weight GTINs and retailer-specific EAN ranges: adapters must omit codes that identify a

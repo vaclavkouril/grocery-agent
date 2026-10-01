@@ -229,18 +229,4 @@ data and trimming yields, rather than the exact product's label. Source stock is
 
 ## Development setup
 
-For the pinned development environment, from the project root:
-
-```sh
-.venv/bin/python -m pip install -r requirements-dev.lock
-.venv/bin/python -m pip install --no-deps --no-build-isolation -e .
-.venv/bin/ruff check .
-.venv/bin/ruff format --check .
-.venv/bin/mypy
-.venv/bin/pytest
-```
-
-The ordinary test suite is offline and uses fixtures and temporary databases. On 2026-10-01 the
-implementation passed 234 tests plus linting and type checking; this is a dated verification,
-not a fixed future test count. See the [architecture](architecture.md) and
-[adapter contract](adapter-contract.md) before extending acquisition.
+See [development](../development.md) for the pinned environment, checks, CI and extension guides.
