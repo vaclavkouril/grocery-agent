@@ -1,0 +1,10 @@
+# Environment variables prefixed GROCERY_RECIPES_ override these options.
+default_provider = "codex"
+default_cache_policy = "local"
+context_ingredients = 60
+provider_timeout_seconds = 120
+acquisition_profiles = []
+
+# Optional provider model: model = "your-model"
+# Scope values must match the scopes recorded in your local catalogue.
+[source_scopes]

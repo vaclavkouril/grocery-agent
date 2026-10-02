@@ -1,11 +1,12 @@
 import re
 from collections import Counter
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from itertools import combinations
 from zoneinfo import ZoneInfo
 
-from pydantic import AwareDatetime
+from pydantic import AwareDatetime, model_validator
 
 from grocery_agent.meals.catalog import (
     Ingredient,
@@ -27,6 +28,19 @@ class IngredientPrice(DomainModel):
     price_per_kg_czk: Decimal
     offer: Offer | None = None
     observed_at: AwareDatetime | None = None
+    source_id: str | None = None
+    run_id: str | None = None
+    shopping_context: str = ""
+
+    @model_validator(mode="after")
+    def set_shopping_context(self) -> "IngredientPrice":
+        context = (
+            f"{self.source_id or ''}|{self.offer.product.store_id}|{self.offer.scope}"
+            if self.offer
+            else ""
+        )
+        object.__setattr__(self, "shopping_context", context)
+        return self
 
 
 class MealLine(DomainModel):
@@ -50,6 +64,7 @@ class PlannedMeal(DomainModel):
     protein_g_per_czk: Decimal | None
     use_first_grams: Decimal
     stores: tuple[str, ...]
+    shopping_contexts: tuple[str, ...] = ()
     steps: tuple[str, ...]
 
 
@@ -70,8 +85,10 @@ def retailer(price: IngredientPrice) -> str:
     return price.offer.product.store_id if price.offer else ""
 
 
-def rejection_reason(offer: Offer, policy: MealPolicy) -> str | None:
-    if offer.scope != policy.scope:
+def rejection_reason(
+    offer: Offer, policy: MealPolicy, *, allowed_scopes: tuple[str, ...] | None = None
+) -> str | None:
+    if offer.scope not in (allowed_scopes if allowed_scopes is not None else (policy.scope,)):
         return "scope"
     if policy.retailers and offer.product.store_id not in policy.retailers:
         return "retailer"
@@ -110,12 +127,26 @@ def matches(ingredient: Ingredient, offer: Offer) -> bool:
     )
 
 
+def price_order(price: IngredientPrice) -> tuple[Decimal, str, str, str, str, str, str]:
+    """Keep legacy retailer/SKU preference and resolve provenance ties consistently."""
+    return (
+        price.price_per_kg_czk,
+        retailer(price),
+        price.offer.product.sku if price.offer else "",
+        price.shopping_context,
+        price.run_id or "",
+        price.observed_at.isoformat() if price.observed_at else "",
+        price.offer.model_dump_json(exclude_computed_fields=True) if price.offer else "",
+    )
+
+
 def plan_meals(
     reader: CurrentOfferReader,
     catalog: MealCatalog,
     now: datetime,
     *,
     batch: OfferBatch | None = None,
+    source_scopes: Mapping[str, tuple[str, ...]] | None = None,
 ) -> MealReport:
     if now.tzinfo is None:
         raise ValueError("planning requires an aware timestamp")
@@ -139,7 +170,16 @@ def plan_meals(
             )
     for observed in reader.iter_offers(batch):
         offer = observed.offer
-        reason = rejection_reason(offer, policy)
+        if source_scopes is not None:
+            reason = (
+                "source"
+                if observed.source_id is None or observed.source_id not in source_scopes
+                else rejection_reason(
+                    offer, policy, allowed_scopes=source_scopes[observed.source_id]
+                )
+            )
+        else:
+            reason = rejection_reason(offer, policy)
         if not timedelta(0) <= now - observed.observed_at <= max_age:
             reason = "stale"
         elif (offer.valid_from and offer.valid_from > today) or (
@@ -159,29 +199,27 @@ def plan_meals(
                     price_per_kg_czk=offer.unit_price.amount,
                     offer=offer,
                     observed_at=observed.observed_at,
+                    source_id=observed.source_id,
+                    run_id=observed.run_id,
                 )
                 # Stable tie-break, independent of pagination order.
                 previous = best.get(key)
-                store_key = (key, offer.product.store_id)
+                store_key = (
+                    key,
+                    candidate.shopping_context
+                    if source_scopes is not None
+                    else offer.product.store_id,
+                )
                 store_previous = by_store.get(store_key)
-                if store_previous is None or (candidate.price_per_kg_czk, offer.product.sku) < (
-                    store_previous.price_per_kg_czk,
-                    store_previous.offer.product.sku if store_previous.offer else "",
-                ):
+                if store_previous is None or price_order(candidate) < price_order(store_previous):
                     by_store[store_key] = candidate
-                if previous is None or (
-                    candidate.price_per_kg_czk,
-                    offer.product.store_id,
-                    offer.product.sku,
-                ) < (
-                    previous.price_per_kg_czk,
-                    previous.offer.product.store_id if previous.offer else "",
-                    previous.offer.product.sku if previous.offer else "",
-                ):
+                if previous is None or price_order(candidate) < price_order(previous):
                     best[key] = candidate
     meals: list[PlannedMeal] = []
     for recipe in catalog.recipes:
         if recipe.meal_style != policy.meal_style:
+            continue
+        if policy.max_minutes is not None and recipe.minutes > policy.max_minutes:
             continue
         required = {key: grams * policy.servings for key, grams in recipe.grams.items()}
         owned = {key: catalog.pantry.available_grams(key, grams) for key, grams in required.items()}
@@ -214,10 +252,7 @@ def plan_meals(
                     if options:
                         basket[key] = min(
                             options,
-                            key=lambda price: (
-                                price.price_per_kg_czk,
-                                price.offer.product.store_id if price.offer else "",
-                            ),
+                            key=price_order,
                         )
                 if recipe.grams.keys() <= basket.keys():
                     basket_options.append(basket)
@@ -229,12 +264,18 @@ def plan_meals(
                 sum(to_buy[key] * option[key].price_per_kg_czk for key in recipe.grams),
                 len(
                     {
-                        price.offer.product.store_id
+                        price.shopping_context if source_scopes is not None else retailer(price)
                         for key, price in option.items()
                         if key in recipe.grams and price.offer
                     }
                 ),
-                tuple(retailer(option[key]) for key in recipe.grams),
+                tuple(
+                    option[key].shopping_context
+                    if source_scopes is not None
+                    else retailer(option[key])
+                    for key in recipe.grams
+                ),
+                tuple(price_order(option[key]) for key in recipe.grams),
             ),
         )
         nutrients = Nutrients(kcal="0", protein_g="0", carbs_g="0", fat_g="0")
@@ -245,6 +286,7 @@ def plan_meals(
         )
         lines: list[MealLine] = []
         stores: set[str] = set()
+        shopping_contexts: set[str] = set()
         for key, grams in recipe.grams.items():
             ingredient, price = catalog.ingredients[key], basket[key]
             edible = grams * ingredient.edible_fraction
@@ -253,6 +295,7 @@ def plan_meals(
             cost += usage
             if price.offer:
                 stores.add(price.offer.product.store_id)
+                shopping_contexts.add(price.shopping_context)
             lines.append(
                 MealLine(
                     price=price,
@@ -291,6 +334,7 @@ def plan_meals(
                     Decimal(0),
                 ),
                 stores=tuple(sorted(stores)),
+                shopping_contexts=tuple(sorted(shopping_contexts)),
                 steps=recipe.steps,
             )
         )
@@ -319,8 +363,10 @@ def plan_meals(
         policy=policy,
         pantry=catalog.pantry,
         meals=tuple(meals),
-        cheap_ingredients=tuple(value for value in best.values() if value.offer is not None),
-        rejected_offers=dict(rejected),
+        cheap_ingredients=tuple(
+            best[key] for key in catalog.ingredients if key in best and best[key].offer is not None
+        ),
+        rejected_offers=dict(sorted(rejected.items())),
         warnings=batch.warnings,
         source_latest_run_status=batch.latest_run_status,
     )

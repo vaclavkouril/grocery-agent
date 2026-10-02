@@ -80,11 +80,17 @@ def render_html(report: MealReport, catalog: MealCatalog) -> str:
                 f"nutrition source</a>; edible yield {ingredient.edible_fraction * 100:g}%</li>"
             )
             if offer:
+                provenance = (
+                    f"source: {esc(price.source_id or 'unspecified')}; "
+                    f"run: {esc(price.run_id or 'unspecified')}; "
+                    f"shopping context: {esc(price.shopping_context)}; "
+                )
                 promotion = offer.promotion
                 dates = f"{offer.valid_from or 'start not specified'} → "
                 dates += str(offer.valid_until or "end not specified")
                 terms.append(
                     f"<li>{esc(offer.product.name)} — {esc(dates)}; "
+                    f"{provenance}"
                     f"{esc(promotion.conditions or 'no terms reported') if promotion else ''}; "
                     f"stock: {esc(offer.availability.value)}; observed {price.observed_at}</li>"
                 )

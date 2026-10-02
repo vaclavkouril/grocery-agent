@@ -89,6 +89,7 @@ class MealPolicy(DomainModel):
     servings: int = Field(default=1, ge=1, le=20)
     min_protein_g: Nonnegative = Decimal(70)
     max_kcal: Positive = Decimal(850)
+    max_minutes: int | None = Field(default=None, strict=True, ge=1, le=480)
     max_cost_per_serving_czk: Positive = Decimal(100)
     max_age_hours: int = Field(default=36, ge=1, le=168)
     allow_loyalty: bool = False

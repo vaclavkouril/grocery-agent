@@ -20,8 +20,13 @@ from grocery_agent.models.common import DomainModel, ExactDecimal, NonEmpty, Pos
 class PolicyOverrides(DomainModel):
     meal_style: MealStyle | None = None
     servings: Annotated[int | None, Field(strict=True, ge=1, le=20)] = None
-    min_protein_g: Annotated[ExactDecimal | None, Field(ge=0)] = None
-    max_kcal: Annotated[ExactDecimal | None, Field(gt=0)] = None
+    min_protein_g: Annotated[
+        ExactDecimal | None, Field(ge=0, le=300, max_digits=16, decimal_places=6)
+    ] = None
+    max_kcal: Annotated[
+        ExactDecimal | None, Field(gt=0, le=10000, max_digits=16, decimal_places=6)
+    ] = None
+    max_minutes: Annotated[int | None, Field(strict=True, ge=1, le=480)] = None
     max_cost_per_serving_czk: Annotated[
         ExactDecimal | None, Field(gt=0, max_digits=16, decimal_places=4)
     ] = None
