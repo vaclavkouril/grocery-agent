@@ -1,0 +1,12 @@
+enabled = false
+api_url = "http://127.0.0.1:8001"
+ws_url = "ws://127.0.0.1:5225"
+user_id = 1
+# Numeric IDs of contacts already paired with this local daemon profile.
+allowed_contact_ids = []
+# Reconcile this many recent chat items per allowed contact on each connection.
+history_count = 50
+poll_seconds = 1
+response_timeout = 15
+reconnect_seconds = 1
+reconnect_max_seconds = 30

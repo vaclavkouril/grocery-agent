@@ -1,0 +1,20 @@
+# GROCERY_EMAIL_* environment values override these non-secret settings.
+enabled = false
+intake_enabled = false
+delivery_enabled = false
+api_url = "http://127.0.0.1:8001"
+imap_host = ""
+imap_port = 993
+imap_mailbox = "INBOX"
+smtp_host = ""
+smtp_port = 465
+sender = ""
+trusted_authserv_id = ""
+# Set true ONLY after trusted ingress strips client-supplied Authentication-Results.
+trusted_ingress = false
+trusted_senders = []
+max_message_bytes = 262144
+max_command_chars = 4096
+batch_size = 20
+poll_seconds = 30.0
+timeout_seconds = 30.0
