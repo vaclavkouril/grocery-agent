@@ -1,5 +1,10 @@
 # Grocery Agent
 
+Runtime source is under `src/`, including the independent website in `src/frontend/`.
+Installed applications can run outside the checkout with explicit runtime paths and
+[shared/application TOML configuration](docs/configuration.md).
+Live-check prerequisites and deferred account setup are recorded in [acceptance](docs/acceptance.md).
+
 Collect Czech grocery offers from Kupi and direct retailer catalogs, keep price history, and create local
 protein-focused meal reports.
 
@@ -11,6 +16,13 @@ protein-focused meal reports.
 
 Dependencies are installed below. SQLite is created automatically; no API keys are needed.
 Docker deployments also need Docker Engine and Compose v2.
+
+Optional invite-only API and durable recipe worker: see [backend quickstart](docs/backend.md).
+This includes authenticated jobs, private reports, pinned grocery inputs, administrator refresh
+and independently configured API/worker processes. The backend also serves a separate static
+[website](docs/website.md) with pantry controls, offers and private reports; CLI delegation and
+typed Python clients use the same API. Optional [email and SimpleX clients](docs/channels.md)
+support verified bindings and confirmed commands; both remain disabled by default.
 
 ## Install
 
@@ -68,6 +80,20 @@ Main dishes are the default. Select a smaller meal style and optionally change i
 
 Each successful request also saves an isolated report under `data/reports/requests/`.
 Add `--no-latest` to leave the local `latest` shortcuts alone. No user accounts are required.
+
+## Profile-aware acquisition
+
+`grocery-recipes` now plans locally from cached groceries, refreshing missing/stale profiles by
+default. Use `--cache-only` to prevent acquisition or `--no-cache` to require a successful refresh.
+CLI and backend share one recipe service; explicitly compatible sources can be combined with
+preserved provenance and distinct shopping-context limits. See [recipe configuration and library
+usage](docs/recipe-service.md).
+
+`grocery-scrape --config config/scrape.toml` collects configured profiles once;
+`grocery-collect --config config/collect.toml --once` uses the independently configured collector.
+Without `--once`, collection defaults to 02:00 Europe/Prague. Profiles publish separate cache
+heads; existing `grocery-agent` commands retain their legacy catalogue behavior.
+See [profiles, migration and API selection](docs/acquisition-profiles.md).
 
 ## Docker collector and catalogue
 

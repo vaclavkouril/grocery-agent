@@ -16,6 +16,7 @@ x-runtime: &runtime
     - ALL
 
 x-environment: &environment
+  GROCERY_SHARED_CONFIG: ${GROCERY_SHARED_CONFIG:-}
   GROCERY_CATALOGUE_MAX_AGE_HOURS: ${GROCERY_CATALOGUE_MAX_AGE_HOURS:-36}
   GROCERY_CATALOGUE_TIMEZONE: ${GROCERY_CATALOGUE_TIMEZONE:-Europe/Prague}
   GROCERY_CATALOGUE_ALLOW_CACHED_ON_FAILURE: ${GROCERY_CATALOGUE_ALLOW_CACHED_ON_FAILURE:-true}
@@ -57,6 +58,87 @@ services:
     profiles: [tools]
     command: [stores]
     environment: *environment
+
+  profile-collector:
+    <<: *runtime
+    profiles: [acquisition]
+    entrypoint: [grocery-collect]
+    command: [--config, /app/config/collect.toml]
+    restart: unless-stopped
+    environment: *environment
+
+  profile-scrape:
+    <<: *runtime
+    profiles: [tools]
+    entrypoint: [grocery-scrape]
+    command: [--config, /app/config/scrape.toml]
+    environment: *environment
+
+  backend:
+    <<: *runtime
+    profiles: [backend]
+    entrypoint: [grocery-backend]
+    command: [--config, /app/config/backend.toml, serve, --host, 0.0.0.0]
+    restart: unless-stopped
+    environment:
+      <<: *environment
+      GROCERY_BACKEND_PROVIDERS: ${GROCERY_BACKEND_PROVIDERS:-["template"]}
+      GROCERY_BACKEND_EMAIL_ENABLED: ${GROCERY_BACKEND_EMAIL_ENABLED:-false}
+      GROCERY_BACKEND_SIMPLEX_ENABLED: ${GROCERY_BACKEND_SIMPLEX_ENABLED:-false}
+      GROCERY_BACKEND_EMAIL_TRANSPORT_TOKEN: ${GROCERY_BACKEND_EMAIL_TRANSPORT_TOKEN:-}
+      GROCERY_BACKEND_SIMPLEX_TRANSPORT_TOKEN: ${GROCERY_BACKEND_SIMPLEX_TRANSPORT_TOKEN:-}
+    ports:
+      - '127.0.0.1:${GROCERY_BACKEND_PORT:-8001}:8001'
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/live', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    <<: *runtime
+    profiles: [backend]
+    entrypoint: [grocery-backend]
+    command: [--config, /app/config/backend.toml, worker]
+    restart: unless-stopped
+    stop_grace_period: 300s
+    environment:
+      <<: *environment
+      GROCERY_BACKEND_PROVIDERS: ${GROCERY_BACKEND_PROVIDERS:-["template"]}
+
+  email:
+    <<: *runtime
+    profiles: [email]
+    entrypoint: [grocery-email]
+    command: [--config, /app/config/email.toml]
+    restart: unless-stopped
+    environment:
+      GROCERY_EMAIL_ENABLED: ${GROCERY_EMAIL_ENABLED:-false}
+      GROCERY_EMAIL_API_URL: http://backend:8001
+      GROCERY_EMAIL_SERVICE_TOKEN: ${GROCERY_BACKEND_EMAIL_TRANSPORT_TOKEN:-}
+      GROCERY_EMAIL_INTAKE_ENABLED: ${GROCERY_EMAIL_INTAKE_ENABLED:-false}
+      GROCERY_EMAIL_DELIVERY_ENABLED: ${GROCERY_EMAIL_DELIVERY_ENABLED:-false}
+      GROCERY_EMAIL_IMAP_USERNAME: ${GROCERY_EMAIL_IMAP_USERNAME:-}
+      GROCERY_EMAIL_IMAP_PASSWORD: ${GROCERY_EMAIL_IMAP_PASSWORD:-}
+      GROCERY_EMAIL_SMTP_USERNAME: ${GROCERY_EMAIL_SMTP_USERNAME:-}
+      GROCERY_EMAIL_SMTP_PASSWORD: ${GROCERY_EMAIL_SMTP_PASSWORD:-}
+
+  simplex:
+    <<: *runtime
+    profiles: [simplex]
+    entrypoint: [grocery-simplex]
+    command: [--config, /app/config/simplex.toml]
+    restart: unless-stopped
+    # Linux: reach the separately operated, unauthenticated loopback SimpleX daemon.
+    network_mode: host
+    environment:
+      GROCERY_SIMPLEX_ENABLED: ${GROCERY_SIMPLEX_ENABLED:-false}
+      GROCERY_SIMPLEX_API_URL: http://127.0.0.1:${GROCERY_BACKEND_PORT:-8001}
+      GROCERY_SIMPLEX_TRANSPORT_TOKEN: ${GROCERY_BACKEND_SIMPLEX_TRANSPORT_TOKEN:-}
+      GROCERY_SIMPLEX_WS_URL: ${GROCERY_SIMPLEX_WS_URL:-ws://127.0.0.1:5225}
+      GROCERY_SIMPLEX_USER_ID: ${GROCERY_SIMPLEX_USER_ID:-1}
+      GROCERY_SIMPLEX_ALLOWED_CONTACT_IDS: ${GROCERY_SIMPLEX_ALLOWED_CONTACT_IDS:-[]}
+      GROCERY_SIMPLEX_HISTORY_COUNT: ${GROCERY_SIMPLEX_HISTORY_COUNT:-50}
 
 volumes:
   grocery-data:

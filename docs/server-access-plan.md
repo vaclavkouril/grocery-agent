@@ -1,9 +1,16 @@
 # Server access and command controls
 
-Status: phase 1 foundation and phase 1b meal styles implemented, 2026-10-01. The application
-runs through the CLI, independent collector and private read-only catalogue API. Accounts/jobs,
-browser controls, email and SimpleX below remain planned. See [implemented services](phase-one.md)
-and [collector/catalogue deployment](catalogue.md) for commands available now.
+Status: remaining application waves implemented, 2026-10-02. See
+[website/client behavior](website.md) and [backend behavior and limits](backend.md)
+for invite-only bearer sessions, durable owned recipe jobs, leases/recovery, immutable DB-backed
+reports, administrator refresh, and [confirmed email/SimpleX commands and outbox delivery](channels.md).
+Profile-isolated acquisition is implemented; see [acquisition profiles](acquisition-profiles.md).
+Local-first and configured combined-source recipes now use the [shared service](recipe-service.md).
+Optional password/cookie login, standalone profile refresh selection/coalescing/cooldowns,
+shared TOML configuration and expanded recipe request parameters are implemented; see the
+linked subsystem documents and [configuration reference](configuration.md).
+The sections below are the recorded target design, not a claim that every feature
+is available. Existing [CLI services](phase-one.md) and [catalogue deployment](catalogue.md) remain.
 
 ## Confirmed scope
 

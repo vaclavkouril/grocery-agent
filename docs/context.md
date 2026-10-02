@@ -1,105 +1,68 @@
 # Compact project context
 
-Resume from this file; use the linked documents and source files for details. Updated 2026-10-01.
+Updated 2026-10-02. Resume here, then read the linked subsystem documentation.
+Check the dirty worktree before editing; previous waves are intentionally uncommitted.
 
-## Scope and preferences
+## Intent and boundaries
 
-- Modular Czech grocery acquisition and protein-focused meal suggestions, primarily on Linux.
-- Praha, lactose-free, high protein; main dishes default, breakfast/snack optional.
-- CLI works without accounts. Multiple users are planned for server access.
-- No LLM frameworks. Retailer knowledge stays in adapters; consumers use canonical offers.
-- Money, quantities and macros use Decimal. Raw evidence stays outside business models.
-- README contains installation/running requirements; developer detail lives in `development.md`/`docs/`.
-- No service/timer was started and no commits were pushed.
+Czech grocery acquisition and nutrition-aware recipes. Independent applications share a reusable
+library, not application entrypoints. Local CLI needs no account. Backend is invite-only.
+New recipes default to Codex; existing meal commands retain fixed templates. Ingredients must have
+known configured nutrition. Decimal is used for prices, quantities, macros and pantry arithmetic.
+Email and SimpleX stay disabled until explicitly configured. No services, real account integrations,
+production migrations or live model/retailer acceptance runs were activated by this implementation.
 
-## Where things live
+## Source and runtime layout
 
-All source paths below are under `src/grocery_agent/`.
+- `src/grocery_agent/`: canonical models, retailer adapters, pipeline/persistence, profile cache,
+  ingredient/meal planner, providers, configuration, typed contracts, HTTP clients and commands.
+- `src/grocery_agent/apps/`: scrape, collect, recipes, API/worker, email and SimpleX entrypoints.
+- `src/frontend/`: static HTML/CSS/JS website and dependency-free Node contract tests.
+  Wheels bundle the website and sample configuration; runtime files do not belong beside installed code.
+- `config/`: editable nonsecret TOML; `tests/`: offline tests/captures; `docs/`: subsystem docs.
+- `data/`: ignored offer/control SQLite DBs, evidence and local reports. One acquisition writer.
+- Root Docker/Compose/CI files provide opt-in roles. Remote execution uses installed console commands
+  with explicit absolute configuration/runtime paths, not a required checkout working directory.
 
-| Path | Responsibility |
-| --- | --- |
-| `models/` | Product identity, store products, offers, promotions, units, purchase terms/costs |
-| `stores/base.py`, `stores/registry.py` | Streaming adapter contract and factory registry |
-| `stores/{kupi,rohlik,tesco,makro,mock}/` | Source config, acquisition and fixture-testable parsing |
-| `stores/robots.py` | Shared robots rules; Kupi keeps a compatibility import |
-| `pipeline/` | Evidence retention, canonical validation, rejected records, run counts/status |
-| `persistence/` | SQLAlchemy repository, immutable price history, readers, snapshots |
-| `workflow.py` | Shared process lock for acquisition and local report publication |
-| `persistence/migrations/` | Independent Alembic offer/control migration trees |
-| `persistence/control/` | Optional separate user/profile DB, ownership filtering, revision checks |
-| `application/` | Versioned typed commands, parameter resolution, services, runtime composition, reports |
-| `meals/` | Curated ingredients/recipes, pantry deductions, ranking, macros, HTML/JSON reports |
-| `matching/` | Exact GTIN identity boundary; fuzzy cross-store matching deferred |
-| `catalogue/` | Indexed published cache, expiry/freshness rules, read-only API |
-| `collector/` | Independent scheduled collection, last-complete publication, DST-aware timing |
-| `cli/main.py` | CLI composition; no dependency on accounts or a running server |
+## Implemented waves
 
-Root configuration: `config/meals.toml`, `config/collector.toml`, `.env.example`.
-Deployment: `Dockerfile`, `compose.yaml`, pinned requirements, `.github/workflows/ci.yml`.
-Offline tests: `tests/`, shared adapter contract, sanitized captures in `tests/fixtures/`.
-Runtime: ignored `data/` contains DBs, snapshots, reports and private Makro session state.
+- [Profile acquisition](acquisition-profiles.md): selected native acquisition profiles, isolated
+  fingerprint heads, actual scope/coverage, atomic complete publication and failure retention.
+  `grocery-scrape` runs once; `grocery-collect` runs once or schedules 02:00 Europe/Prague by default.
+- [Recipe service](recipe-service.md): local-first/cache-only/refresh/no-cache, pinned combined sources,
+  shopping-context limits, quote provenance, bounded model contexts, one validation repair, deterministic
+  evaluation and immutable reports. CLI/API/text/browser share request parameters.
+- [Backend](backend.md): durable owner-scoped jobs, leases/recovery, quotas/idempotency, pinned inputs,
+  invitations, bearer sessions, optional password login and secure cookie/CSRF sessions.
+  Administrator source/profile refreshes are coalesced and cooldown-limited without exposing other users.
+- [Website](website.md): capability-driven pantry/recipe forms, offers, progress/history/private reports,
+  invitation/password/token login and optional cookie resume. Shared synchronous/asynchronous HTTP client.
+- [Channels](channels.md), [email](email.md), [SimpleX](simplex.md): separately configured transports,
+  proof-of-control binding, command confirmation, deduplicated intake and leased outbox retries.
+- [Configuration](configuration.md): defaults → shared TOML → app TOML → environment → explicit options.
+  Credentials are environment-only; runtime paths remain configurable independently of source location.
 
-## Implemented behavior
+## Storage and compatibility
 
-- Phase 1: reusable controls/services, optional separate control DB, collector/cache/API/Docker files.
-- Phase 1b: styles `main` (70 g protein / 850 kcal / 100 Kč), `breakfast` (35/650/80),
-  `snack` (25/450/60). Eight recipes total; explicit request limits override style defaults.
-- `--have INGREDIENT=2kg|available`, `--use-first`, `--have-seasonings` work across styles.
-- `application/commands.py`: typed `MealCommand`, `WorkflowCommand`, `ScrapeCommand`; structured
-  allowlisted `key=value` input. Profiles/request overrides resolve without opening a user DB.
-- Writer composition explicitly migrates offer DB; readers open it read-only. Control DB opens
-  only when requested. Baseline adoption validates the existing schema and preserves history.
-- Publication replaces the catalogue head atomically only after a successful nonempty run.
-  Failed refreshes retain the last complete collection within the default 36-hour freshness limit,
-  show warnings and hide expired/not-yet-valid offers. Price history/evidence are preserved.
-- Reports pin a run and save immutable per-request inputs/catalog/report files; CLI `latest` is
-  a local convenience. UUIDs do not authorize access; future server ownership checks are required.
-- Daily collection defaults to **02:00 Europe/Prague**, configurable, DST handled. Not activated.
-- Catalogue API is private and read-only, loopback by default, with health/status/filter endpoints.
-  Docker roles are collector, catalogue API and on-demand CLI; base image excludes browser extras.
+Migration heads: offers `offers_0003`, control `control_0004`. Old collections retain legacy unknown
+coverage, not guessed profiles. Control migrations preserve users, sessions, jobs and channel state.
+Startup requires current schemas; migrations are explicit. Back up both DBs and evidence/report files.
+Old commands/catalogue endpoints/template recipes remain compatible. Library code never imports apps.
 
-## Acquisition limits
+## Acquisition limits and acceptance
 
-- Kupi: 13 grocery categories, multiple retailers, advertised promotions; default meal source.
-- Rohlík: public HTTP/JSON catalogue, 11 food/drink categories. Dated live produce collection
-  succeeded; scope reflects the anonymous warehouse/locality, not a chosen delivery address.
-- Tesco: isolated Playwright browser, ordinary departments, standard/Clubcard variants. Live
-  produce page parsed; page two returned 403. Complete live acquisition remains blocked.
-- Makro: customer session and selected branch, VAT-inclusive package quotations, sale minimums,
-  increments and explicitly known item fees/deposits. Authenticated live pricing remains unverified.
-- Missing charges are unknown, not zero; estimated weights do not imply guaranteed checkout costs.
-  Meals rank consumed-ingredient cost, not whole-package checkout or basket delivery fees.
-- Meal planning consumes one configured source/scope at a time; it does not combine source batches.
+Kupi promotions cover multiple retailers. Rohlík public scope is anonymous locality/warehouse, not
+a delivery guarantee. Tesco complete live scraping remains limited by retailer access; Makro requires
+customer session/branch and live prices remain unverified. Unknown fees are not zero, estimated weights
+are not guaranteed checkout quantities, and recipe costs are consumed-ingredient rather than basket totals.
+Exact GTIN matching is supported; fuzzy identity and checkout ordering are outside this task.
 
-## Phase order and next work
-
-Keep the agreed order: **1 foundation (done) → 1b meal styles (done) → 2 users/jobs →
-3 browser → 4 configurable email → 5 SimpleX Chat**. Accounts/authentication, durable jobs,
-public browser controls, email and SimpleX transport are not implemented.
-Details: [server plan](server-access-plan.md), [phase 1](phase-one.md),
-[catalogue/deployment](catalogue.md), [meals](meals.md), [adapter contract](adapter-contract.md).
-
-## Verification
-
-Combined tree on 2026-10-01: **441 offline tests passed**, Ruff lint/format passed (132 files),
-mypy passed (89 source files). Python here is 3.14.7; project supports 3.13+.
-The preceding foundation-only committed archive passed 334 tests. A native wheel was built.
-Docker is absent locally; image/Compose execution is unverified. PostgreSQL has no live verification.
-The sandbox blocks asyncio's internal wake-up socket; run offline pytest with approved escalation
-if it stalls in `asyncio.to_thread`. No live retailer requests are needed for normal tests.
-
-## Recent logical commits (oldest first)
-
-```text
-c912557 feat: add separate schema migrations and published grocery catalogue
-f8376e2 feat: add reusable meal controls and independent catalogue collector
-07c31cb chore: package collector and catalogue services for Docker
-5c19c6b refactor: share robots policy across acquisition adapters
-3b9383c feat: model purchase constraints and exact package costs
-f2f9d95 feat: acquire Rohlik public catalogue with coverage checks
-2c01c71 feat: add Tesco browser adapter and offline catalogue fixtures
-01d1cf0 feat: add authenticated Makro assortment and pack pricing
-fdb2b79 feat: register direct retailers and document acquisition setup
-```
-
-This handoff follows those commits. Check `git status` and `git log` before resuming work.
+Run offline pytest, Ruff, mypy and `npm test --prefix src/frontend`; browser fixtures require Chromium.
+Final integration: 1,013 offline/browser tests passed; Node, Ruff and mypy (126 files)
+passed. Built-wheel defaults/assets/migrations/entrypoints were verified from an unrelated CWD.
+This sandbox needs approved pytest escalation for asyncio wake-up sockets.
+Docker is installed but local Compose execution is unverified (Compose plugin unavailable).
+Real Codex and local Ollama structured drafts passed after schema compatibility/ID fixes.
+Live account setup and remaining Docker prerequisites are tracked in [acceptance](acceptance.md).
+Mailboxes, paired contacts, Makro customer pricing and deployed reverse-proxy/TLS remain separately
+configured operator acceptance. See README/development.md for commands and deployment/backups.

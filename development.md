@@ -53,9 +53,10 @@ optional extras; install them when an adapter or deployment requires them.
 Normal tests use saved fixtures and temporary databases and forbid live network access. Optional
 network tests belong under the `live` marker. GitHub Actions runs linting, formatting, type
 checking and offline tests on Python 3.13 and 3.14. The implementation verification on
-2026-10-01 passed 441 offline tests, Ruff lint/format checks and mypy (89 source files).
-These counts are a dated result. Docker is absent on
-this machine, so local image execution remains unverified; CI includes Docker build/smoke checks.
+2026-10-01 passed 903 offline tests, one fixture-backed desktop/mobile combined-source browser test,
+frontend Node contracts, Ruff lint/format checks and mypy (122 source files). A wheel build and
+packaged migration/entrypoint checks passed. Docker's Compose plugin is unavailable locally,
+so image/Compose execution remains unverified; CI includes fixture-backed acquisition smoke checks.
 
 ## Architecture and contracts
 
@@ -71,6 +72,8 @@ this machine, so local image execution remains unverified; CI includes Docker bu
 - [Proposed server UI, multi-user controls, email and SimpleX plan](docs/server-access-plan.md)
 - [Implemented phase 1 services, commands and separate databases](docs/phase-one.md)
 - [Collector, catalogue API, cache policy and Docker](docs/catalogue.md)
+- [Profile-aware acquisition, migration and cached profile selection](docs/acquisition-profiles.md)
+- [Shared local-first recipes, cache policies and combined sources](docs/recipe-service.md)
 
 Acquisition is streamed through `AcquisitionAdapter`; single-retailer adapters use its
 `StoreAdapter` specialization. Adapters supply canonical candidates and source evidence and

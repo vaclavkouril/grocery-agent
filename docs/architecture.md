@@ -1,5 +1,31 @@
 # Architecture
 
+The authenticated [backend and worker](backend.md) now compose catalogue reads with durable
+recipe jobs. `backend/` contains API, authorization/queue repositories, snapshot-based recipe
+execution and lease recovery; `apps/backend.py` owns startup. Control migration `control_0002`
+adds sessions, invitations, verified channel bindings, jobs and notification outbox. The API
+process never invokes a recipe provider, and provider-generated drafts are evaluated through
+the existing Decimal planner. Results and HTML are committed to the separate control database.
+Profile-isolated publication and explicit recipe selection are implemented through separate
+scrape/collect apps; see [acquisition profiles](acquisition-profiles.md). `recipe_cache.py` and
+`recipe_service.py` share local-cache-first orchestration and combined-source execution between CLI
+and backend. The backend recipe executor import is a compatibility adapter. Optional password
+and cookie/CSRF sessions, durable auth throttles and source/profile refresh gates use `control_0004`.
+Shared TOML layering and portable bundled defaults are described in [configuration](configuration.md).
+See [recipe execution and compatible scopes](recipe-service.md).
+
+The separate static `src/frontend/` consumes authenticated API contracts and server capabilities.
+It has no build-time dependency or library imports and is packaged as optional backend assets.
+`contracts.py` shares response types; `http_client.py` supplies synchronous/asynchronous Python
+clients. `apps/recipes.py --api-url` delegates through that client; browser recipe choices come
+from advertised schemas rather than duplicating server configuration. See [website](website.md).
+
+`channels/email.py` and `channels/simplex.py` own transport-specific identity/MIME/WebSocket
+handling; `apps/email.py` and `apps/simplex.py` own independent startup/configuration. Shared
+`channel_commands.py` parses messages without side effects. `backend/channels.py` owns verified
+bindings, transactional intake/confirmations and leased outbox state, using `control_0003`.
+Transport service tokens and user sessions are separate authorities. See [channels](channels.md).
+
 ```mermaid
 flowchart TD
     Source[HTML / JSON / API / browser / leaflet] --> Adapter[AcquisitionAdapter / StoreAdapter]
