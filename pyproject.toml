@@ -22,14 +22,27 @@ dependencies = [
 [project.optional-dependencies]
 browser = ["playwright>=1.55,<2"]
 catalogue-api = ["fastapi>=0.116,<1", "uvicorn>=0.35,<1"]
+simplex = ["websockets>=15,<17"]
 postgres = ["psycopg[binary]>=3.2,<4"]
 dev = ["pytest>=8.4,<10", "pytest-asyncio>=1.2,<2", "ruff>=0.14,<1", "mypy>=1.18,<2"]
 
 [project.scripts]
 grocery-agent = "grocery_agent.cli.main:main"
+grocery-recipes = "grocery_agent.apps.recipes:main"
+grocery-backend = "grocery_agent.apps.backend:main"
+grocery-worker = "grocery_agent.apps.backend:worker_main"
+grocery-email = "grocery_agent.apps.email:main"
+grocery-simplex = "grocery_agent.apps.simplex:main"
+grocery-scrape = "grocery_agent.apps.scrape:main"
+grocery-collect = "grocery_agent.apps.collect:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/grocery_agent"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/frontend/index.html" = "grocery_agent/website/index.html"
+"src/frontend/assets" = "grocery_agent/website/assets"
+"config" = "grocery_agent/defaults"
 
 [tool.ruff]
 target-version = "py313"
@@ -47,5 +60,8 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-ra --strict-markers -m 'not live'"
-markers = ["live: optional tests requiring retailer/network access"]
+addopts = "-ra --strict-markers -m 'not live and not browser'"
+markers = [
+  "live: optional tests requiring retailer/network access",
+  "browser: optional fixture-backed browser tests requiring a local browser and loopback",
+]

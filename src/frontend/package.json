@@ -1,0 +1,7 @@
+{
+  "name": "grocery-agent-website",
+  "description": "Independent website source under src/frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node --test tests/*.test.js"}
+}

@@ -16,7 +16,7 @@ from grocery_agent.stores.mock.parser import parse_offers
 
 @pytest.fixture(autouse=True)
 def forbid_network(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
-    if request.node.get_closest_marker("live"):
+    if request.node.get_closest_marker("live") or request.node.get_closest_marker("browser"):
         return
 
     def denied(*args: Any, **kwargs: Any) -> None:

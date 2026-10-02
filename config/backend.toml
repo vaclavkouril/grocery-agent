@@ -1,0 +1,31 @@
+# Environment GROCERY_BACKEND_* values override this application configuration.
+providers = ["codex", "template"]
+codex_models = []
+ollama_models = []
+cache_policies = ["cache-only"]
+# Recipe acquisition is opt-in. For other policies, configure acquisition_profiles
+# and (for combined requests) explicit source_scopes, matching the worker environment.
+# See docs/recipe-service.md. Empty source_scopes retains the legacy meal source/scope.
+session_hours = 24
+password_login_enabled = false
+cookie_sessions_enabled = false
+cookie_secure = true
+# trusted_origin = "https://grocery.example" # Required before enabling cookies.
+auth_rate_limit = 10
+auth_rate_window_seconds = 300
+refresh_cooldown_seconds = 300
+lease_seconds = 180
+heartbeat_seconds = 15
+max_attempts = 3
+max_pending_per_user = 10
+provider_timeout_seconds = 120
+context_ingredients = 60
+host = "127.0.0.1"
+port = 8001
+website_enabled = true
+# frontend_dir = "/absolute/path/to/frontend" # Optional external static asset directory.
+email_enabled = false
+simplex_enabled = false
+delivery_lease_seconds = 120
+delivery_max_attempts = 5
+# Transport credentials must ONLY use GROCERY_BACKEND_*_TRANSPORT_TOKEN environment variables.
