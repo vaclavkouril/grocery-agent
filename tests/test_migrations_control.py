@@ -26,23 +26,49 @@ from grocery_agent.persistence.migrations import (
 )
 from grocery_agent.persistence.migrations.baselines import offer_baseline
 from grocery_agent.persistence.repository import SQLAlchemyOfferRepository
-from grocery_agent.persistence.schema import Base, ObservationRow, SnapshotRow
+from grocery_agent.persistence.schema import Base, ObservationRow, ScrapeRunRow, SnapshotRow
 from grocery_agent.persistence.snapshots import FileSnapshotStore
+from grocery_agent.pipeline.results import ScrapeResult
 from tests.application_support import NOW, complete_batch
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class LegacyOfferRepository(SQLAlchemyOfferRepository):
+    """Seed the historical schema with its historical run insert, before migration."""
+
+    def start_run(self, result: ScrapeResult) -> None:
+        with self.sessions.begin() as session:
+            session.add(
+                ScrapeRunRow(
+                    id=result.run_id,
+                    source_id=result.source_id,
+                    started_at=result.started_at,
+                    status=result.status,
+                )
+            )
 
 
 def test_independent_schemas_and_revisions(tmp_path: Path) -> None:
     offers = open_database(f"sqlite:///{tmp_path / 'offers.db'}")
     control = create_database_engine(f"sqlite:///{tmp_path / 'control.db'}")
     try:
-        assert upgrade_database(control, "control") == "control_0001"
-        assert schema_version(offers, "offers") == "offers_0002"
+        assert upgrade_database(control, "control") == "control_0004"
+        assert schema_version(offers, "offers") == "offers_0003"
         assert set(inspect(control).get_table_names()) == {
             "users",
             "user_profiles",
             "control_schema_version",
+            "sessions",
+            "invitations",
+            "channel_bindings",
+            "jobs",
+            "notification_outbox",
+            "channel_events",
+            "channel_confirmations",
+            "auth_rate_limits",
+            "refresh_gates",
+            "refresh_receipts",
         }
         assert "users" not in inspect(offers).get_table_names()
         assert "price_observations" not in inspect(control).get_table_names()
@@ -63,7 +89,7 @@ def test_legacy_adoption_preserves_prices_and_snapshot_references(
     legacy = create_database_engine(f"sqlite:///{path}")
     metadata = offer_baseline()
     metadata.create_all(legacy)
-    repository = SQLAlchemyOfferRepository(legacy)
+    repository = LegacyOfferRepository(legacy)
     run = complete_batch(
         repository, FileSnapshotStore(tmp_path / "snapshots"), [Offer.model_validate(candidate)]
     )
@@ -75,8 +101,8 @@ def test_legacy_adoption_preserves_prices_and_snapshot_references(
     assert schema_version(legacy, "offers") is None
     require_offer_schema(legacy)  # Readability does not stamp or bootstrap the database.
     assert "offers_schema_version" not in inspect(legacy).get_table_names()
-    assert upgrade_database(legacy, "offers") == "offers_0002"
-    assert upgrade_database(legacy, "offers") == "offers_0002"
+    assert upgrade_database(legacy, "offers") == "offers_0003"
+    assert upgrade_database(legacy, "offers") == "offers_0003"
     with legacy.connect() as connection:
         after = {
             name: connection.execute(select(table)).mappings().all()

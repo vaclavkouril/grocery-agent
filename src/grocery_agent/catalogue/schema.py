@@ -1,6 +1,7 @@
 from datetime import date, datetime
+from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, Date, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import JSON, BigInteger, Boolean, Date, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from grocery_agent.persistence.schema import Base
@@ -12,6 +13,23 @@ class CatalogueHeadRow(Base):
     source_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     run_id: Mapped[str] = mapped_column(ForeignKey("scrape_runs.id"))
     published_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class CatalogueProfileHeadRow(Base):
+    __tablename__ = "catalogue_profile_heads"
+    source_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    profile_fingerprint: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("scrape_runs.id"))
+    published_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class CatalogueRunProfileRow(Base):
+    __tablename__ = "catalogue_run_profiles"
+    run_id: Mapped[str] = mapped_column(ForeignKey("scrape_runs.id"), primary_key=True)
+    source_id: Mapped[str] = mapped_column(String(64), index=True)
+    profile_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    profile: Mapped[dict[str, Any] | None] = mapped_column(JSON(none_as_null=True))
+    coverage: Mapped[dict[str, Any]] = mapped_column(JSON)
 
 
 class CatalogueEntryRow(Base):

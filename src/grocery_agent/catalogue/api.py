@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from grocery_agent.catalogue.config import CatalogueSettings
 from grocery_agent.catalogue.models import CataloguePage, CatalogueQuery, CatalogueState
 from grocery_agent.catalogue.repository import SQLAlchemyCatalogueRepository
-from grocery_agent.catalogue.schema import CatalogueHeadRow
+from grocery_agent.catalogue.schema import CatalogueProfileHeadRow
 from grocery_agent.config import Settings
 from grocery_agent.models.common import StoreId, utc_now
 from grocery_agent.models.product import Unit
@@ -61,9 +61,14 @@ def create_app(
         return {"status": "ok"}
 
     @app.get("/health/ready")
-    def ready(source: StoreId = "kupi") -> dict[str, str]:
+    def ready(
+        source: StoreId = "kupi",
+        profile_fingerprint: Annotated[
+            str | None, Query(pattern=r"^(?:legacy|[0-9a-f]{24})$")
+        ] = None,
+    ) -> dict[str, str]:
         with available_catalogue():
-            repository.state(source, clock())
+            repository.state(source, clock(), profile_fingerprint)
         return {"status": "ready", "source": source}
 
     @app.get("/v1/sources")
@@ -71,18 +76,37 @@ def create_app(
         with available_catalogue(), engine.connect() as connection:
             return tuple(
                 connection.scalars(
-                    select(CatalogueHeadRow.source_id).order_by(CatalogueHeadRow.source_id)
+                    select(CatalogueProfileHeadRow.source_id)
+                    .distinct()
+                    .order_by(CatalogueProfileHeadRow.source_id)
                 )
             )
 
-    @app.get("/v1/status/{source}", response_model=CatalogueState)
-    def status(source: StoreId) -> CatalogueState:
+    @app.get("/v1/capabilities")
+    def capabilities() -> dict[str, object]:
+        return {"catalogue": True, "recipes": False, "profile_selection": True}
+
+    @app.get("/v1/collections")
+    def collections(source: StoreId | None = None) -> list[dict[str, object]]:
         with available_catalogue():
-            return repository.state(source, clock())
+            return repository.collections(source)
+
+    @app.get("/v1/status/{source}", response_model=CatalogueState)
+    def status(
+        source: StoreId,
+        profile_fingerprint: Annotated[
+            str | None, Query(pattern=r"^(?:legacy|[0-9a-f]{24})$")
+        ] = None,
+    ) -> CatalogueState:
+        with available_catalogue():
+            return repository.state(source, clock(), profile_fingerprint)
 
     @app.get("/v1/offers", response_model=CataloguePage)
     def offers(
         source: StoreId,
+        profile_fingerprint: Annotated[
+            str | None, Query(pattern=r"^(?:legacy|[0-9a-f]{24})$")
+        ] = None,
         scope: str | None = None,
         category: str | None = None,
         retailer: Annotated[list[str] | None, Query()] = None,
@@ -100,6 +124,7 @@ def create_app(
             query = CatalogueQuery.model_validate(
                 {
                     "source_id": source,
+                    "profile_fingerprint": profile_fingerprint,
                     "scope": scope,
                     "category": category,
                     "retailers": tuple(retailer or ()),

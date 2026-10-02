@@ -10,12 +10,14 @@ from fastapi import FastAPI
 from sqlalchemy import Engine
 
 from grocery_agent.catalogue.api import create_app
+from grocery_agent.catalogue.profiles import AcquisitionProfile, Coverage
 from grocery_agent.catalogue.repository import SQLAlchemyCatalogueRepository
 from grocery_agent.config import Settings
 from grocery_agent.models.offer import Offer
 from grocery_agent.persistence.repository import SQLAlchemyOfferRepository
 from grocery_agent.persistence.snapshots import FileSnapshotStore
 from tests.application_support import NOW, complete_batch, failed_batch
+from tests.test_profile_catalogue import ProfiledFixtureRepository
 
 
 @asynccontextmanager
@@ -69,3 +71,47 @@ async def test_api_can_start_before_storage_without_creating_it(tmp_path: Path) 
         assert response.status_code == 503
         assert str(path) not in response.text and "sqlite" not in response.text
     assert not path.exists() and not (tmp_path / "control.db").exists()
+
+
+@pytest.mark.asyncio
+async def test_profile_discovery_and_exact_query_selection(
+    engine: Engine,
+    repository: SQLAlchemyOfferRepository,
+    snapshots: FileSnapshotStore,
+    candidate: dict[str, Any],
+) -> None:
+    cache = SQLAlchemyCatalogueRepository(engine)
+    legacy = complete_batch(repository, snapshots, [Offer.model_validate(candidate)])
+    cache.publish(legacy.run_id)
+    profile = AcquisitionProfile(source_id="mock", name="selected")
+    run = complete_batch(
+        ProfiledFixtureRepository(engine, profile),
+        snapshots,
+        [Offer.model_validate({**candidate, "offer_key": "selected"})],
+    )
+    cache.record_profile(
+        run.run_id,
+        profile,
+        Coverage(profile_fingerprint=profile.fingerprint, observed=1, complete=True),
+    )
+    cache.publish(run.run_id)
+    app = create_app(Settings(database_url=str(engine.url), _env_file=None), clock=lambda: NOW)
+    async with local_client(app) as client:
+        collections = (await client.get("/v1/collections?source=mock")).json()
+        assert {c["profile_fingerprint"] for c in collections} == {"legacy", profile.fingerprint}
+        params = {"source": "mock", "profile_fingerprint": profile.fingerprint}
+        page = (await client.get("/v1/offers", params=params)).json()
+        assert page["state"]["run_id"] == run.run_id
+        assert page["state"]["coverage_complete"] is True
+        assert page["items"][0]["offer"]["offer_key"] == "selected"
+        assert (await client.get("/health/ready", params=params)).status_code == 200
+        assert (await client.get("/v1/status/mock", params=params)).json()["run_id"] == run.run_id
+        assert (await client.get("/v1/offers?source=mock")).json()["state"][
+            "run_id"
+        ] == legacy.run_id
+        assert (
+            await client.get("/v1/offers?source=mock&profile_fingerprint=invalid")
+        ).status_code == 422
+        assert (
+            await client.get("/v1/offers?source=mock&profile_fingerprint=" + "0" * 24)
+        ).status_code == 503

@@ -1,5 +1,7 @@
 import fcntl
 import logging
+import math
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -14,14 +16,23 @@ from grocery_agent.models.common import utc_now as utc_now
 
 
 @contextmanager
-def writer_lock(path: Path) -> Iterator[None]:
+def writer_lock(path: Path, *, timeout_seconds: float = 0) -> Iterator[None]:
     """All CLI writers use one advisory process lock; the OS releases it on exit/crash."""
+    if not math.isfinite(timeout_seconds) or timeout_seconds < 0:
+        raise ValueError("writer lock timeout must be finite and nonnegative")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a") as file:
-        try:
-            fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise ValueError("another acquisition/report workflow holds the writer lock") from exc
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            try:
+                fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as exc:
+                if time.monotonic() >= deadline:
+                    raise ValueError(
+                        "another acquisition/report workflow holds the writer lock"
+                    ) from exc
+                time.sleep(min(0.05, max(0, deadline - time.monotonic())))
         try:
             yield
         finally:

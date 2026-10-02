@@ -1,0 +1,7 @@
+daily_at = "02:00"
+timezone = "Europe/Prague"
+run_on_startup = true
+
+[[profiles]]
+source_id = "kupi"
+name = "default"

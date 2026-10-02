@@ -7,6 +7,7 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from grocery_agent.catalogue.schema import CatalogueRunProfileRow
 from grocery_agent.models.observation import PriceObservation
 from grocery_agent.models.offer import Offer
 from grocery_agent.models.product import Product
@@ -62,6 +63,22 @@ class SQLAlchemyOfferRepository:
                     source_id=result.source_id,
                     started_at=result.started_at,
                     status=result.status,
+                )
+            )
+            session.flush()
+            session.add(
+                CatalogueRunProfileRow(
+                    run_id=result.run_id,
+                    source_id=result.source_id,
+                    profile_fingerprint=result.profile_fingerprint,
+                    profile=result.acquisition_profile,
+                    coverage={
+                        "profile_fingerprint": result.profile_fingerprint,
+                        "observed": 0,
+                        "complete": False,
+                        "actual_scopes": [],
+                        "warnings": [],
+                    },
                 )
             )
 

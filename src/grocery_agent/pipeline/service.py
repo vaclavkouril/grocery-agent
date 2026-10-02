@@ -26,6 +26,11 @@ class ScrapePipeline:
 
     async def run(self, adapter: AcquisitionAdapter, context: AdapterContext) -> ScrapeResult:
         result = ScrapeResult(source_id=adapter.source_id)
+        if context.profile is not None:
+            if context.profile.source_id != adapter.source_id:
+                raise ValueError("acquisition profile source must match adapter")
+            result.profile_fingerprint = context.profile.fingerprint
+            result.acquisition_profile = context.profile.model_dump(mode="json")
         if context.run_id is not None:
             result.run_id = str(UUID(context.run_id))
         self.repository.start_run(result)

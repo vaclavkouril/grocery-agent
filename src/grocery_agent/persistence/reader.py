@@ -31,6 +31,8 @@ class ObservedOffer:
     offer: Offer
     observed_at: datetime
     observation_id: str | None = None
+    source_id: str | None = None
+    run_id: str | None = None
 
 
 class CurrentOfferReader(Protocol):
@@ -104,4 +106,10 @@ class SQLAlchemyCurrentOfferReader:
             for payload, observed_at, observation_id in session.execute(statement):
                 if not isinstance(observed_at, datetime) or not isinstance(observation_id, str):
                     raise ValueError("observation has no valid timestamp")
-                yield ObservedOffer(Offer.model_validate(payload), observed_at, observation_id)
+                yield ObservedOffer(
+                    Offer.model_validate(payload),
+                    observed_at,
+                    observation_id,
+                    source_id=batch.source_id,
+                    run_id=batch.run_id,
+                )

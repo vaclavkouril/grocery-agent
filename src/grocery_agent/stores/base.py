@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 from pydantic import JsonValue
 
+from grocery_agent.catalogue.profiles import AcquisitionProfile
 from grocery_agent.models.offer import Offer
 
 
@@ -37,6 +38,7 @@ class AcquisitionItem:
 class AdapterContext:
     http: httpx.AsyncClient
     run_id: str | None = None
+    profile: AcquisitionProfile | None = None
 
 
 class AcquisitionAdapter(ABC):

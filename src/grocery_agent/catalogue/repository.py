@@ -6,7 +6,7 @@ from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Engine, delete, false, func, insert, or_, select
+from sqlalchemy import Engine, delete, false, func, insert, or_, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from grocery_agent.catalogue.config import CatalogueSettings
@@ -16,7 +16,13 @@ from grocery_agent.catalogue.models import (
     CatalogueQuery,
     CatalogueState,
 )
-from grocery_agent.catalogue.schema import CatalogueEntryRow, CatalogueHeadRow
+from grocery_agent.catalogue.profiles import AcquisitionProfile, Coverage
+from grocery_agent.catalogue.schema import (
+    CatalogueEntryRow,
+    CatalogueHeadRow,
+    CatalogueProfileHeadRow,
+    CatalogueRunProfileRow,
+)
 from grocery_agent.models.common import utc_now
 from grocery_agent.models.normalization import normalize_name
 from grocery_agent.models.offer import Offer
@@ -39,12 +45,129 @@ class SQLAlchemyCatalogueRepository:
         self.reader = SQLAlchemyCurrentOfferReader(engine)
         self.settings = settings or CatalogueSettings()
 
+    def record_profile(self, run_id: str, profile: AcquisitionProfile, coverage: Coverage) -> None:
+        """Finalize recorded coverage using actual persisted canonical membership, not a label."""
+        if coverage.profile_fingerprint != profile.fingerprint:
+            raise ValueError("coverage fingerprint does not match profile")
+        with self.sessions.begin() as session:
+            session.execute(
+                update(CatalogueRunProfileRow)
+                .where(CatalogueRunProfileRow.run_id == run_id)
+                .values(source_id=CatalogueRunProfileRow.source_id)
+            )
+            run = session.get(ScrapeRunRow, run_id)
+            if run is None or run.source_id != profile.source_id:
+                raise ValueError("profile source does not match recorded run")
+            existing = session.get(CatalogueRunProfileRow, run_id)
+            if existing and existing.profile_fingerprint not in {"legacy", profile.fingerprint}:
+                raise ValueError("a run cannot be assigned to another profile")
+            batch = OfferBatch(run_id, run.source_id, run.finished_at or run.started_at)
+            observed = tuple(self.reader.iter_offers(batch))
+            scopes = tuple(sorted({item.offer.scope for item in observed}))
+            if coverage.observed not in {run.accepted, len(observed)}:
+                raise ValueError("coverage observed count does not match recorded membership")
+            supplied_scopes = tuple(getattr(coverage, "actual_scopes", ()))
+            if supplied_scopes and set(supplied_scopes) != set(scopes):
+                raise ValueError("coverage actual scopes do not match recorded offers")
+            if coverage.actual_scope is not None and scopes != (coverage.actual_scope,):
+                raise ValueError("coverage actual scope does not match recorded offers")
+            if profile.scope is not None and any(scope != profile.scope for scope in scopes):
+                raise ValueError("recorded offers are outside the requested profile scope")
+            complete = (
+                coverage.complete
+                and profile.coverage == "complete"
+                and run.status == "success"
+                and run.finished_at is not None
+                and bool(observed)
+            )
+            normalized = Coverage.model_validate(
+                {
+                    **coverage.model_dump(),
+                    "observed": len(observed),
+                    "complete": complete,
+                    "actual_scope": scopes[0] if len(scopes) == 1 else None,
+                    "actual_scopes": scopes,
+                }
+            ).model_dump(mode="json")
+            payload = profile.model_dump(mode="json")
+            published = session.scalar(
+                select(CatalogueProfileHeadRow.run_id).where(
+                    CatalogueProfileHeadRow.run_id == run_id
+                )
+            )
+            if published:
+                if not existing or (existing.profile, existing.coverage) != (payload, normalized):
+                    raise ValueError("published profile metadata is immutable")
+                return
+            if existing is None:
+                session.add(
+                    CatalogueRunProfileRow(
+                        run_id=run_id,
+                        source_id=run.source_id,
+                        profile_fingerprint=profile.fingerprint,
+                        profile=payload,
+                        coverage=normalized,
+                    )
+                )
+            else:
+                existing.profile_fingerprint, existing.profile, existing.coverage = (
+                    profile.fingerprint,
+                    payload,
+                    normalized,
+                )
+
+    def collections(self, source_id: str | None = None) -> list[dict[str, Any]]:
+        """List published identities, including stale/legacy ones, without claiming freshness."""
+        with self.sessions() as session:
+            statement = (
+                select(CatalogueProfileHeadRow, CatalogueRunProfileRow, ScrapeRunRow)
+                .join(
+                    CatalogueRunProfileRow,
+                    CatalogueRunProfileRow.run_id == CatalogueProfileHeadRow.run_id,
+                )
+                .join(ScrapeRunRow, ScrapeRunRow.id == CatalogueProfileHeadRow.run_id)
+            )
+            if source_id is not None:
+                statement = statement.where(CatalogueProfileHeadRow.source_id == source_id)
+            return [
+                {
+                    "source_id": head.source_id,
+                    "profile_fingerprint": head.profile_fingerprint,
+                    "run_id": head.run_id,
+                    "published_at": head.published_at.isoformat(),
+                    "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+                    "profile": metadata.profile,
+                    "coverage": metadata.coverage,
+                }
+                for head, metadata, run in session.execute(
+                    statement.order_by(
+                        CatalogueProfileHeadRow.source_id,
+                        CatalogueProfileHeadRow.profile_fingerprint,
+                    )
+                )
+            ]
+
     def publish(self, run_id: str) -> None:
         with self.sessions.begin() as session:
+            # Take the single writer lock before reads; avoids SQLite snapshot upgrade races.
+            session.execute(
+                update(CatalogueRunProfileRow)
+                .where(CatalogueRunProfileRow.run_id == run_id)
+                .values(source_id=CatalogueRunProfileRow.source_id)
+            )
             run = session.get(ScrapeRunRow, run_id)
             if run is None or run.status != "success" or run.finished_at is None:
                 raise ValueError("only a complete successful run may replace the catalogue")
-            head = session.get(CatalogueHeadRow, run.source_id)
+            metadata = session.get(CatalogueRunProfileRow, run_id)
+            fingerprint = metadata.profile_fingerprint if metadata else "legacy"
+            if fingerprint != "legacy":
+                assert metadata is not None
+                coverage = Coverage.model_validate(metadata.coverage)
+                coverage.require_publishable()
+                profile = AcquisitionProfile.model_validate(metadata.profile)
+                if profile.fingerprint != fingerprint or profile.source_id != run.source_id:
+                    raise ValueError("recorded profile identity is invalid")
+            head = session.get(CatalogueProfileHeadRow, (run.source_id, fingerprint))
             if head is not None and head.run_id == run_id:
                 return
             if head is not None:
@@ -95,20 +218,59 @@ class SQLAlchemyCatalogueRepository:
                 session.execute(insert(CatalogueEntryRow), rows)
             if head is None:
                 session.add(
-                    CatalogueHeadRow(source_id=run.source_id, run_id=run_id, published_at=utc_now())
+                    CatalogueProfileHeadRow(
+                        source_id=run.source_id,
+                        profile_fingerprint=fingerprint,
+                        run_id=run_id,
+                        published_at=utc_now(),
+                    )
                 )
             else:
                 head.run_id, head.published_at = run_id, utc_now()
+            if metadata is None:
+                session.add(
+                    CatalogueRunProfileRow(
+                        run_id=run_id,
+                        source_id=run.source_id,
+                        profile_fingerprint="legacy",
+                        profile=None,
+                        coverage={
+                            "profile_fingerprint": "legacy",
+                            "observed": 0,
+                            "complete": False,
+                            "actual_scopes": [],
+                            "warnings": ["Acquisition coverage is unknown."],
+                        },
+                    )
+                )
+            if fingerprint == "legacy":
+                legacy = session.get(CatalogueHeadRow, run.source_id)
+                if legacy is None:
+                    session.add(
+                        CatalogueHeadRow(
+                            source_id=run.source_id, run_id=run_id, published_at=utc_now()
+                        )
+                    )
+                else:
+                    legacy.run_id, legacy.published_at = run_id, utc_now()
+            session.flush()
             # These derived rows are disposable; observations, runs and raw evidence are retained.
-            old_runs = select(ScrapeRunRow.id).where(
-                ScrapeRunRow.source_id == run.source_id, ScrapeRunRow.id != run_id
+            retained = select(CatalogueProfileHeadRow.run_id).union(select(CatalogueHeadRow.run_id))
+            session.execute(
+                delete(CatalogueEntryRow).where(CatalogueEntryRow.run_id.not_in(retained))
             )
-            session.execute(delete(CatalogueEntryRow).where(CatalogueEntryRow.run_id.in_(old_runs)))
 
-    def _state(self, session: Session, source_id: str, now: datetime) -> CatalogueState:
+    def _state(
+        self,
+        session: Session,
+        source_id: str,
+        now: datetime,
+        profile_fingerprint: str | None = None,
+    ) -> CatalogueState:
         if now.tzinfo is None or now.utcoffset() is None:
             raise ValueError("catalogue reads require an aware timestamp")
-        head = session.get(CatalogueHeadRow, source_id)
+        fingerprint = profile_fingerprint or "legacy"
+        head = session.get(CatalogueProfileHeadRow, (source_id, fingerprint))
         if head is None:
             raise CatalogueNotReady("catalogue is empty; collect or rebuild a complete batch first")
         run = session.get(ScrapeRunRow, head.run_id)
@@ -117,15 +279,37 @@ class SQLAlchemyCatalogueRepository:
         expires = run.finished_at + timedelta(hours=self.settings.max_age_hours)
         if not run.finished_at <= now <= expires:
             raise ValueError("published catalogue is stale or in the future; rescan required")
+        metadata = session.get(CatalogueRunProfileRow, run.id)
+        coverage = (
+            Coverage.model_validate(metadata.coverage)
+            if metadata
+            else Coverage(
+                profile_fingerprint="legacy",
+                complete=False,
+                warnings=("Acquisition coverage is unknown.",),
+            )
+        )
+        if fingerprint != "legacy":
+            coverage.require_publishable()
         latest = session.scalar(
             select(ScrapeRunRow)
-            .where(ScrapeRunRow.source_id == source_id)
+            .join(CatalogueRunProfileRow, CatalogueRunProfileRow.run_id == ScrapeRunRow.id)
+            .where(
+                ScrapeRunRow.source_id == source_id,
+                CatalogueRunProfileRow.profile_fingerprint == fingerprint,
+            )
             .order_by(ScrapeRunRow.started_at.desc(), ScrapeRunRow.id)
             .limit(1)
         )
         assert latest is not None
-        degraded = latest.status != "success" or (
-            latest.id != run.id and latest.started_at > run.started_at
+        latest_metadata = session.get(CatalogueRunProfileRow, latest.id)
+        latest_complete = fingerprint == "legacy" or bool(
+            latest_metadata and latest_metadata.coverage.get("complete")
+        )
+        degraded = (
+            latest.status != "success"
+            or not latest_complete
+            or (latest.id != run.id and latest.started_at > run.started_at)
         )
         if degraded and not self.settings.allow_cached_on_failure:
             raise ValueError(
@@ -138,7 +322,11 @@ class SQLAlchemyCatalogueRepository:
             )
             if degraded
             else ()
-        )
+        ) + coverage.warnings
+        if fingerprint == "legacy" and not coverage.warnings:
+            warnings += (
+                "Legacy collection has unknown acquisition coverage; no profile is inferred.",
+            )
         return CatalogueState(
             source_id=source_id,
             run_id=run.id,
@@ -149,15 +337,21 @@ class SQLAlchemyCatalogueRepository:
             latest_run_status=latest.status,
             degraded=degraded,
             warnings=warnings,
+            profile_fingerprint=fingerprint,
+            coverage_complete=coverage.complete,
+            actual_scope=coverage.actual_scope,
+            actual_scopes=tuple(getattr(coverage, "actual_scopes", ())),
         )
 
-    def state(self, source_id: str, now: datetime) -> CatalogueState:
+    def state(
+        self, source_id: str, now: datetime, profile_fingerprint: str | None = None
+    ) -> CatalogueState:
         with self.sessions() as session:
-            return self._state(session, source_id, now)
+            return self._state(session, source_id, now, profile_fingerprint)
 
     def search(self, query: CatalogueQuery, now: datetime) -> CataloguePage:
         with self.sessions() as session:
-            state = self._state(session, query.source_id, now)
+            state = self._state(session, query.source_id, now, query.profile_fingerprint)
             today = now.astimezone(ZoneInfo(self.settings.timezone)).date()
             cutoff = now - timedelta(hours=self.settings.max_age_hours)
             predicates = [

@@ -9,6 +9,7 @@ from grocery_agent.models.product import Unit
 
 class CatalogueQuery(DomainModel):
     source_id: StoreId
+    profile_fingerprint: Annotated[str | None, Field(pattern=r"^(?:legacy|[0-9a-f]{24})$")] = None
     scope: NonEmpty | None = None
     category: NonEmpty | None = None
     retailers: tuple[StoreId, ...] = ()
@@ -42,6 +43,10 @@ class CatalogueState(DomainModel):
     latest_run_status: str
     degraded: bool = False
     warnings: tuple[str, ...] = ()
+    profile_fingerprint: str = "legacy"
+    coverage_complete: bool = False
+    actual_scope: str | None = None
+    actual_scopes: tuple[str, ...] = ()
 
 
 class CatalogueItem(DomainModel):
@@ -56,3 +61,21 @@ class CataloguePage(DomainModel):
     offset: int
     limit: int
     items: tuple[CatalogueItem, ...]
+
+
+class CatalogueSnapshot(DomainModel):
+    """Pinned catalogue inputs used by a request."""
+
+    source_ids: tuple[StoreId, ...]
+    profile_fingerprints: tuple[str, ...] = ()
+    run_ids: tuple[str, ...] = ()
+    complete: bool = True
+    warnings: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def aligned_runs(self) -> Self:
+        if self.run_ids and len(self.run_ids) != len(self.source_ids):
+            raise ValueError("one pinned run is required for each source")
+        if self.profile_fingerprints and len(self.profile_fingerprints) != len(self.source_ids):
+            raise ValueError("one profile fingerprint is required for each source")
+        return self

@@ -15,6 +15,7 @@ from grocery_agent.application.services import (
     WorkflowExecution,
     WorkflowService,
 )
+from grocery_agent.catalogue.profiles import AcquisitionProfile
 from grocery_agent.catalogue.repository import PublishedOfferReader, SQLAlchemyCatalogueRepository
 from grocery_agent.config import Settings
 from grocery_agent.matching.base import ExactGTINResolver
@@ -56,7 +57,10 @@ def meal_service(
 
 
 async def run_acquisition(
-    settings: Settings, adapters: Sequence[AcquisitionAdapter]
+    settings: Settings,
+    adapters: Sequence[AcquisitionAdapter],
+    *,
+    profiles: Sequence[AcquisitionProfile] | None = None,
 ) -> tuple[ScrapeResult, ...]:
     engine = open_database(settings.database_url)
     try:
@@ -65,7 +69,9 @@ async def run_acquisition(
             headers={"User-Agent": settings.user_agent},
             follow_redirects=True,
         ) as http:
-            return await acquisition_service(engine, http, settings).acquire_many(adapters)
+            return await acquisition_service(engine, http, settings).acquire_many(
+                adapters, profiles=profiles
+            )
     finally:
         engine.dispose()
 

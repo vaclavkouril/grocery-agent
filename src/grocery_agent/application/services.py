@@ -13,7 +13,8 @@ import httpx
 
 from grocery_agent.application.commands import MealCommand, WorkflowCommand
 from grocery_agent.application.parameters import MealParameters, resolve_parameters
-from grocery_agent.catalogue.base import CataloguePublisher
+from grocery_agent.catalogue.base import CataloguePublisher, ProfileCataloguePublisher
+from grocery_agent.catalogue.profiles import AcquisitionProfile, Coverage
 from grocery_agent.meals.catalog import MealCatalog
 from grocery_agent.meals.planner import MealReport, plan_meals
 from grocery_agent.models.common import DomainModel, utc_now
@@ -37,21 +38,52 @@ class AcquisitionService:
         self.catalogue = catalogue
 
     async def acquire(
-        self, adapter: AcquisitionAdapter, run_id: UUID | None = None
+        self,
+        adapter: AcquisitionAdapter,
+        run_id: UUID | None = None,
+        profile: AcquisitionProfile | None = None,
     ) -> ScrapeResult:
+        if profile is not None:
+            if not isinstance(self.catalogue, ProfileCataloguePublisher):
+                raise ValueError("profile acquisition requires a profile-aware catalogue publisher")
+            from grocery_agent.acquisition.profiles import profile_adapter
+
+            adapter, profile = profile_adapter(adapter, profile)
         result = await self.pipeline.run(
-            adapter, AdapterContext(self.http, str(run_id) if run_id is not None else None)
+            adapter, AdapterContext(self.http, str(run_id) if run_id is not None else None, profile)
         )
+        if profile is not None:
+            assert isinstance(self.catalogue, ProfileCataloguePublisher)
+            self.catalogue.record_profile(
+                result.run_id,
+                profile,
+                Coverage(
+                    profile_fingerprint=profile.fingerprint,
+                    observed=result.accepted,
+                    complete=result.status == "success"
+                    and result.accepted > 0
+                    and profile.coverage == "complete",
+                ),
+            )
         if result.status == "success" and self.catalogue is not None:
             self.catalogue.publish(result.run_id)
         return result
 
     async def acquire_many(
-        self, adapters: Sequence[AcquisitionAdapter]
+        self,
+        adapters: Sequence[AcquisitionAdapter],
+        *,
+        profiles: Sequence[AcquisitionProfile] | None = None,
     ) -> tuple[ScrapeResult, ...]:
+        if profiles is not None and len(profiles) != len(adapters):
+            raise ValueError("acquisition profiles must align with adapters")
         results = []
-        for adapter in adapters:
-            results.append(await self.acquire(adapter))
+        for index, adapter in enumerate(adapters):
+            results.append(
+                await self.acquire(
+                    adapter, profile=profiles[index] if profiles is not None else None
+                )
+            )
         return tuple(results)
 
 

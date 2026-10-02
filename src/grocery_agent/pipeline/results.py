@@ -19,6 +19,8 @@ class ScrapeResult:
     changed: int = 0
     errors: int = 0
     error_details: list[str] = field(default_factory=list)
+    profile_fingerprint: str = "legacy"
+    acquisition_profile: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         result = asdict(self)
