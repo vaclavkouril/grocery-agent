@@ -89,6 +89,8 @@ default. Use `--cache-only` to prevent acquisition or `--no-cache` to require a 
 CLI and backend share one recipe service; explicitly compatible sources can be combined with
 preserved provenance and distinct shopping-context limits. See [recipe configuration and library
 usage](docs/recipe-service.md).
+Measured local-model recipe quality, speed, memory, and reproduction commands are in the
+[local model benchmark report](docs/local-model-benchmark.md).
 
 `grocery-scrape --config config/scrape.toml` collects configured profiles once;
 `grocery-collect --config config/collect.toml --once` uses the independently configured collector.

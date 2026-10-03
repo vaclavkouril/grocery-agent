@@ -147,3 +147,11 @@ Additional request controls are `retailer_ids`, `allow_loyalty`, `min_protein_g`
 and `--have-seasonings`. Nutrition/time constraints are evaluated deterministically; an otherwise
 valid but infeasible draft does not trigger repair. Retailers can only narrow a configured allowlist,
 and use-first ingredients must exist in known owned pantry stock.
+
+## Local model benchmarking
+
+The local-only benchmark runs model-written recipes against pinned cached offers and the same
+recipe service and Decimal evaluator. It records raw responses, request and token-processing
+times, repairs, rejections, and model memory metadata. It never acquires or migrates grocery data.
+`--inputs-from` replays historical cases without rereading a changing cache. See the
+[machine-specific comparison and reproduction commands](local-model-benchmark.md).
