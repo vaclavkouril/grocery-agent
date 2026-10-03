@@ -2,9 +2,17 @@
 
 import hashlib
 import secrets
+from threading import BoundedSemaphore
 
 N, R, P = 2**17, 8, 1
 MAXMEM = 160 * 1024 * 1024
+# Public sign-in and registration must not allocate one large scrypt buffer per HTTP thread.
+_KDF_SLOTS = BoundedSemaphore(2)
+
+
+def _derive(value: bytes, salt: bytes) -> bytes:
+    with _KDF_SLOTS:
+        return hashlib.scrypt(value, salt=salt, n=N, r=R, p=P, maxmem=MAXMEM, dklen=32)
 
 
 def password_bytes(password: str) -> bytes:
@@ -17,7 +25,7 @@ def password_bytes(password: str) -> bytes:
 def hash_password(password: str) -> str:
     value = password_bytes(password)
     salt = secrets.token_bytes(16)
-    digest = hashlib.scrypt(value, salt=salt, n=N, r=R, p=P, maxmem=MAXMEM, dklen=32)
+    digest = _derive(value, salt)
     return f"scrypt$v1${N}${R}${P}${salt.hex()}${digest.hex()}"
 
 
@@ -35,5 +43,5 @@ def verify_password(password: str, encoded: str | None) -> bool:
     except (ValueError, UnicodeError):
         value = b"invalid password"
         valid = False
-    actual = hashlib.scrypt(value, salt=salt, n=N, r=R, p=P, maxmem=MAXMEM, dklen=32)
+    actual = _derive(value, salt)
     return secrets.compare_digest(actual, expected) and valid

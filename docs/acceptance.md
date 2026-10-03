@@ -1,5 +1,28 @@
 # Remaining acceptance and account setup
 
+## Website and self-registration verification (2026-10-02)
+
+The redesigned responsive website and opt-in self-registration passed 1,029 offline tests
+and all four real-Chromium browser tests, plus 31 Node client/interaction checks. Ruff lint/format,
+mypy (126 source files), diff checks and wheel packaging passed. The wheel includes the final
+HTML, CSS, JavaScript and configuration; no external font/design service is required at runtime.
+
+Browser checks covered desktop/390px mobile registration, confirmation mismatch without a request,
+duplicate usernames, ordinary-user roles, cookie resume/revocation, private account/job isolation,
+keyboard tabs/skip-link focus, existing recipe/report/offer workflows and horizontal overflow.
+Screenshots for visual review are under `/tmp/grocery-ui-{desktop,mobile}.png` and
+`/tmp/grocery-ui-registration-{desktop,mobile}.png`; these are temporary, not deployable assets.
+Passwords and session secrets are cleared from form fields and never persisted in browser storage.
+API tests additionally cover atomic concurrent registration, password bounds, rate limiting before
+hashing, and bounded password-work concurrency.
+
+Registration is implemented but deliberately not enabled in existing deployments. Enable both
+`password_login_enabled` and `registration_enabled` after bootstrapping an administrator; see
+[backend registration setup](backend.md#optional-self-registration). There is no email verification
+or password-recovery feature. Figma was discovered and suggested for editable design collaboration,
+but was not connected or used to generate these assets. No plugins or external accounts were modified.
+Live-model/retailer/mail/chat and Docker checks were not repeated for this change.
+
 ## Planner refactor verification (2026-10-02)
 
 The pre-refactor offline/browser suite passed all 1,013 tests. The planner now prepares
@@ -20,7 +43,7 @@ along with Ruff lint/format checks, mypy on 126 source files, the frontend Node 
 test, and wheel packaging. The upstream TestClient deprecation warning remains.
 Live-provider, retailer and deferred account checks were not repeated for this planner-only change.
 
-## Results (2026-10-02)
+## Earlier integration results (2026-10-02)
 
 The final full offline/browser suite passed (1,013 tests), with two opt-in live tests deselected.
 Ruff, mypy (126 files), Node contracts and wheel packaging passed. One upstream FastAPI/httpx

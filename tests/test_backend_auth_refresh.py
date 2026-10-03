@@ -132,6 +132,7 @@ def test_legacy_invite_and_disabled_cookie_mode_preserve_compatibility(auth_back
     app = client()
     assert app.get("/v1/auth/capabilities").json() == {
         "password_login": False,
+        "registration": False,
         "cookie_sessions": False,
         "session_modes": ["bearer"],
     }

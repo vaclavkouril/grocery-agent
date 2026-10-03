@@ -17,7 +17,8 @@ protein-focused meal reports.
 Dependencies are installed below. SQLite is created automatically; no API keys are needed.
 Docker deployments also need Docker Engine and Compose v2.
 
-Optional invite-only API and durable recipe worker: see [backend quickstart](docs/backend.md).
+Optional API (invite-only by default, with configurable self-registration) and durable recipe worker:
+see [backend quickstart](docs/backend.md).
 This includes authenticated jobs, private reports, pinned grocery inputs, administrator refresh
 and independently configured API/worker processes. The backend also serves a separate static
 [website](docs/website.md) with pantry controls, offers and private reports; CLI delegation and

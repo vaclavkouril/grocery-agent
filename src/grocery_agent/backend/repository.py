@@ -95,12 +95,12 @@ class ControlRepository:
         limit: int = 10,
         window_seconds: int = 300,
     ) -> None:
-        """Fixed hash buckets bound attacker-controlled storage to 1026 rows.
+        """Fixed hash buckets bound attacker-controlled storage to 1539 rows.
 
         Global, client and identity budgets commit before any credential checks.
         Bucket collisions fail closed; no supplied usernames/IPs are persisted.
         """
-        if action not in {"login", "invite"} or not 1 <= limit <= 100:
+        if action not in {"login", "invite", "register"} or not 1 <= limit <= 100:
             raise ValueError("invalid authentication throttle configuration")
         keys = [(f"{action}:global", limit * 10)]
         for kind, value in (("client", client), ("identity", identity)):
@@ -175,6 +175,36 @@ class ControlRepository:
             )
             if enabled is None:
                 raise AccessDenied("Invalid credentials")
+            session.add(
+                SessionRow(
+                    token_hash=token_hash(token),
+                    user_id=user_id,
+                    expires_at=now + timedelta(hours=hours),
+                    revoked=False,
+                )
+            )
+        return token
+
+    def register(self, username: str, password: str, now: datetime, hours: int) -> str:
+        """Atomically create an ordinary account and session; never modify an existing user."""
+        encoded = hash_password(password)
+        token, user_id = secrets.token_urlsafe(32), str(uuid4())
+        with self.sessions.begin() as session:
+            created = session.scalar(
+                self._insert(session, UserRow)
+                .values(
+                    id=user_id,
+                    username=username,
+                    role="user",
+                    enabled=True,
+                    created_at=now,
+                    password_hash=encoded,
+                )
+                .on_conflict_do_nothing(index_elements=[UserRow.username])
+                .returning(UserRow.id)
+            )
+            if created is None:
+                raise Conflict("Unable to create account. Choose another username or sign in.")
             session.add(
                 SessionRow(
                     token_hash=token_hash(token),

@@ -25,6 +25,7 @@ class BackendSettings(BaseSettings):
     acquisition_profiles: tuple[AcquisitionProfile, ...] = ()
     session_hours: int = Field(default=24, ge=1, le=720)
     password_login_enabled: bool = False
+    registration_enabled: bool = False
     cookie_sessions_enabled: bool = False
     cookie_secure: bool = True
     trusted_origin: str | None = None
@@ -67,6 +68,8 @@ class BackendSettings(BaseSettings):
 
     @model_validator(mode="after")
     def unique_permissions(self) -> Self:
+        if self.registration_enabled and not self.password_login_enabled:
+            raise ValueError("self-registration requires password_login_enabled")
         if self.trusted_origin is not None:
             parsed = urlsplit(self.trusted_origin)
             if (

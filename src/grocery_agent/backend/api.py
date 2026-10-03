@@ -1,4 +1,4 @@
-"""Invite-only bearer sessions and owned durable jobs, composed with catalogue routes."""
+"""Configurable account access and owned durable jobs, composed with catalogue routes."""
 
 import hmac
 from collections.abc import Callable
@@ -31,7 +31,12 @@ from .recipes import effective_catalog
 from .repository import AccessDenied, Conflict, ControlRepository, JobView, Principal, RateLimited
 
 COOKIE_NAME = "grocery_session"
-PUBLIC_AUTH = {"/v1/auth/login", "/v1/invitations/accept", "/v1/auth/capabilities"}
+PUBLIC_AUTH = {
+    "/v1/auth/login",
+    "/v1/auth/register",
+    "/v1/invitations/accept",
+    "/v1/auth/capabilities",
+}
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
@@ -64,6 +69,10 @@ class LoginInput(DomainModel):
     def bounded_password(cls, value: SecretStr) -> SecretStr:
         password_bytes(value.get_secret_value())
         return value
+
+
+class RegistrationInput(LoginInput):
+    username: Annotated[str, Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")]
 
 
 class RefreshInput(DomainModel):
@@ -256,6 +265,7 @@ def create_app(
     def auth_capabilities() -> dict[str, Any]:
         return {
             "password_login": backend.password_login_enabled,
+            "registration": backend.registration_enabled,
             "cookie_sessions": backend.cookie_sessions_enabled,
             "session_modes": ["bearer", "cookie"]
             if backend.cookie_sessions_enabled
@@ -334,6 +344,22 @@ def create_app(
             )
         except AccessDenied:
             raise HTTPException(401, "Invalid authentication credentials") from None
+        return session_response(token, payload.session_mode, response)
+
+    @app.post("/v1/auth/register", status_code=201)
+    def register(
+        payload: RegistrationInput, request: Request, response: Response
+    ) -> dict[str, str]:
+        if not backend.registration_enabled:
+            raise HTTPException(403, "Self-registration is disabled")
+        check_mode(payload.session_mode)
+        throttle(request, "register", payload.username)
+        token = repository.register(
+            payload.username,
+            payload.password.get_secret_value(),
+            clock(),
+            backend.session_hours,
+        )
         return session_response(token, payload.session_mode, response)
 
     @app.get("/v1/capabilities", response_model=Capabilities)
@@ -608,7 +634,7 @@ def create_app(
             ] = {
                 "type": "http",
                 "scheme": "bearer",
-                "description": "Revocable invite-only session token",
+                "description": "Revocable account session token",
             }
             schema["components"]["securitySchemes"]["TransportService"] = {
                 "type": "http",

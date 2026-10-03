@@ -8,6 +8,9 @@ cache_policies = ["cache-only"]
 # See docs/recipe-service.md. Empty source_scopes retains the legacy meal source/scope.
 session_hours = 24
 password_login_enabled = false
+# Set BOTH to true to open public username/password registration (no email verification).
+# Leave registration disabled to preserve invite-only access; bootstrap your admin first.
+registration_enabled = false
 cookie_sessions_enabled = false
 cookie_secure = true
 # trusted_origin = "https://grocery.example" # Required before enabling cookies.

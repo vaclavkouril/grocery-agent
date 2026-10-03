@@ -6,7 +6,8 @@ Check the dirty worktree before editing; previous waves are intentionally uncomm
 ## Intent and boundaries
 
 Czech grocery acquisition and nutrition-aware recipes. Independent applications share a reusable
-library, not application entrypoints. Local CLI needs no account. Backend is invite-only.
+library, not application entrypoints. Local CLI needs no account. Backend is invite-only by default;
+optional self-registration requires both password login and registration to be explicitly enabled.
 New recipes default to Codex; existing meal commands retain fixed templates. Ingredients must have
 known configured nutrition. Decimal is used for prices, quantities, macros and pantry arithmetic.
 Email and SimpleX stay disabled until explicitly configured. No services, real account integrations,

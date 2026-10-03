@@ -51,7 +51,8 @@ _SCHEMAS = {
             "session_hours lease_seconds heartbeat_seconds max_attempts max_pending_per_user "
             "provider_timeout_seconds context_ingredients host port website_enabled frontend_dir "
             "email_enabled simplex_enabled delivery_lease_seconds delivery_max_attempts "
-            "password_login_enabled cookie_sessions_enabled cookie_secure trusted_origin "
+            "password_login_enabled registration_enabled cookie_sessions_enabled cookie_secure "
+            "trusted_origin "
             "auth_rate_limit auth_rate_window_seconds refresh_cooldown_seconds"
         ).split()
     ),

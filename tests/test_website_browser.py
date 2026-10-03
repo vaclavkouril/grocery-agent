@@ -1,6 +1,7 @@
 """Optional real-browser acceptance against local fixture offers and the actual backend."""
 
 import asyncio
+import re
 import shutil
 import socket
 import threading
@@ -21,7 +22,7 @@ from grocery_agent.backend.worker import Worker
 from grocery_agent.catalogue.profiles import AcquisitionProfile, Coverage
 from grocery_agent.catalogue.repository import SQLAlchemyCatalogueRepository
 from grocery_agent.config import Settings
-from grocery_agent.persistence.control.schema import JobRow
+from grocery_agent.persistence.control.schema import JobRow, UserRow
 from grocery_agent.persistence.database import create_database_engine
 from grocery_agent.persistence.migrations import upgrade_database
 from grocery_agent.persistence.repository import SQLAlchemyOfferRepository
@@ -80,6 +81,8 @@ def test_password_cookie_session_resumes_and_signout_revokes(engine: Any, tmp_pa
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(origin)
             playwright.expect(page.locator("#password-form")).to_be_visible()
+            playwright.expect(page.locator("#auth-register-tab")).to_be_hidden()
+            playwright.expect(page.locator("#register-form")).to_be_hidden()
             page.locator("#login-username").fill("admin")
             page.locator("#login-password").fill("a long fixture password")
             page.get_by_role("button", name="Sign in with password", exact=True).click()
@@ -109,6 +112,272 @@ def test_password_cookie_session_resumes_and_signout_revokes(engine: Any, tmp_pa
         thread.join(timeout=10)
         sock.close()
         control.dispose()
+
+
+@pytest.fixture
+def registration_site(
+    engine: Any,
+    repository: SQLAlchemyOfferRepository,
+    snapshots: FileSnapshotStore,
+    candidate: dict[str, Any],
+    tmp_path: Path,
+) -> Any:
+    """Actual loopback backend with opt-in registration and local grocery evidence."""
+    run = complete_batch(
+        repository, snapshots, [row.offer for row in groceries(candidate)], source="kupi"
+    )
+    SQLAlchemyCatalogueRepository(engine).publish(run.run_id)
+    control = create_database_engine(f"sqlite:///{tmp_path / 'registration-control.db'}")
+    upgrade_database(control, "control")
+    repo = ControlRepository(control)
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    sock.listen()
+    origin = f"http://localhost:{sock.getsockname()[1]}"
+    settings = Settings(
+        database_url=str(engine.url), meal_config=ROOT / "config/meals.toml", _env_file=None
+    )
+    backend = BackendSettings(
+        providers=("template",),
+        registration_enabled=True,
+        password_login_enabled=True,
+        cookie_sessions_enabled=True,
+        cookie_secure=False,
+        trusted_origin=origin,
+    )
+    server = uvicorn.Server(
+        uvicorn.Config(
+            create_app(settings, backend, engine=control, clock=lambda: NOW),
+            log_level="error",
+            access_log=False,
+        )
+    )
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
+    thread.start()
+    try:
+        deadline = time.monotonic() + 5
+        while not server.started and thread.is_alive() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert server.started, "registration fixture API did not start"
+        yield origin, repo
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)
+        sock.close()
+        control.dispose()
+
+
+@pytest.mark.parametrize(
+    ("device", "viewport"),
+    [("desktop", {"width": 1440, "height": 1000}), ("mobile", {"width": 390, "height": 844})],
+)
+def test_registration_keyboard_cookie_resume_and_account_isolation(
+    registration_site: Any, device: str, viewport: dict[str, int]
+) -> None:
+    executable = shutil.which("chromium")
+    if executable is None:
+        pytest.skip("install Chromium to run fixture-backed browser acceptance")
+    origin, repo = registration_site
+    password = "a long registration fixture password"
+    with playwright.sync_playwright() as runtime:
+        browser = runtime.chromium.launch(executable_path=executable, headless=True)
+        context = browser.new_context(viewport=viewport)
+        context.route(
+            "**/*",
+            lambda route: (
+                route.continue_()
+                if urlparse(route.request.url).hostname in {"127.0.0.1", "localhost"}
+                else route.abort()
+            ),
+        )
+        try:
+            page = context.new_page()
+            errors: list[str] = []
+            registration_requests: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.on(
+                "request",
+                lambda request: (
+                    registration_requests.append(request.url)
+                    if urlparse(request.url).path == "/v1/auth/register"
+                    else None
+                ),
+            )
+            page.goto(origin)
+            playwright.expect(page.locator("#auth-tabs")).to_be_visible()
+            playwright.expect(page.locator("#auth-register-tab")).to_be_visible()
+            screenshot = f"/tmp/grocery-ui-{device}.png"
+            page.screenshot(path=screenshot, full_page=True)
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+            # The first keyboard stop should bypass the masthead and reach the main content.
+            skip = page.get_by_role("link", name=re.compile("skip", re.IGNORECASE)).first
+            page.keyboard.press("Tab")
+            playwright.expect(skip).to_be_focused()
+            playwright.expect(skip).to_be_visible()
+            target = skip.get_attribute("href")
+            assert target and target.startswith("#")
+            page.keyboard.press("Enter")
+            playwright.expect(page.locator(target)).to_be_focused()
+            login_tab = page.locator("#auth-login-tab")
+            register_tab = page.locator("#auth-register-tab")
+            for _ in range(20):
+                page.keyboard.press("Tab")
+                if login_tab.evaluate("element => element === document.activeElement"):
+                    break
+            playwright.expect(login_tab).to_be_focused()
+            page.keyboard.press("ArrowRight")
+            playwright.expect(register_tab).to_be_focused()
+            assert register_tab.evaluate(
+                "element => getComputedStyle(element).outlineStyle !== 'none'"
+            )
+            page.keyboard.press("Enter")
+            playwright.expect(page.locator("#register-form")).to_be_visible()
+            playwright.expect(page.locator("#password-form")).to_be_hidden()
+            page.screenshot(path=f"/tmp/grocery-ui-registration-{device}.png", full_page=True)
+            page.locator("#register-username").fill("alice")
+            page.locator("#register-password").fill(password)
+            page.locator("#register-password-confirm").fill("a different fixture password")
+            page.locator("#register-form").get_by_role(
+                "button", name="Create account", exact=True
+            ).click()
+            playwright.expect(page.locator("#register-error")).not_to_be_empty()
+            assert not registration_requests, "confirmation mismatch must not reach registration"
+            from sqlalchemy import select
+
+            with repo.sessions() as session:
+                assert session.scalar(select(UserRow).where(UserRow.username == "alice")) is None
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+            page.locator("#register-password").fill(password)
+            page.locator("#register-password-confirm").fill(password)
+            with page.expect_response(
+                lambda response: (
+                    urlparse(response.url).path == "/v1/auth/register"
+                    and response.request.method == "POST"
+                )
+            ) as created:
+                page.locator("#register-form").get_by_role(
+                    "button", name="Create account", exact=True
+                ).click()
+            assert created.value.status == 201
+            assert created.value.json()["session_mode"] == "cookie"
+            assert "token" not in created.value.json()
+            playwright.expect(page.locator("#workspace")).to_be_visible()
+            playwright.expect(page.locator("#username")).to_have_text("alice")
+            playwright.expect(page.locator("#admin")).to_be_hidden()
+            assert page.locator("#register-password").input_value() == ""
+            assert page.locator("#register-password-confirm").input_value() == ""
+            assert page.evaluate("localStorage.length + sessionStorage.length") == 0
+            assert any(
+                cookie["name"] == "grocery_session"
+                and cookie["httpOnly"]
+                and cookie["sameSite"] == "Strict"
+                for cookie in context.cookies()
+            )
+            with repo.sessions() as session:
+                alice = session.scalar(select(UserRow).where(UserRow.username == "alice"))
+                assert alice and alice.role == "user" and alice.password_hash
+                assert password not in alice.password_hash
+            page.reload()
+            playwright.expect(page.locator("#workspace")).to_be_visible()
+            playwright.expect(page.locator("#username")).to_have_text("alice")
+            playwright.expect(page.locator("#admin")).to_be_hidden()
+            with page.expect_response(
+                lambda response: (
+                    urlparse(response.url).path == "/v1/recipes"
+                    and response.request.method == "POST"
+                )
+            ) as submitted:
+                page.locator("#generate").click()
+            assert submitted.value.status == 202
+            alice_job = submitted.value.json()["job_id"]
+            playwright.expect(page.locator("#job-progress")).to_contain_text("queued")
+            page.get_by_role("button", name="Sign out", exact=True).click()
+            playwright.expect(page.locator("#signin-panel")).to_be_visible()
+            assert not any(cookie["name"] == "grocery_session" for cookie in context.cookies())
+
+            # Duplicate registration is handled as a bounded user-facing error, not a session.
+            page.locator("#auth-register-tab").click()
+            page.locator("#register-username").fill("alice")
+            page.locator("#register-password").fill(password)
+            page.locator("#register-password-confirm").fill(password)
+            with page.expect_response(
+                lambda response: (
+                    urlparse(response.url).path == "/v1/auth/register"
+                    and response.request.method == "POST"
+                )
+            ) as duplicate:
+                page.locator("#register-form").get_by_role(
+                    "button", name="Create account", exact=True
+                ).click()
+            assert 400 <= duplicate.value.status < 500
+            playwright.expect(page.locator("#register-error")).not_to_be_empty()
+            assert password not in page.locator("#register-error").inner_text()
+            assert not any(
+                marker in duplicate.value.text()
+                for marker in ("scrypt$", "IntegrityError", "INSERT INTO", password)
+            )
+            playwright.expect(page.locator("#workspace")).to_be_hidden()
+            with repo.sessions() as session:
+                assert len(session.scalars(select(UserRow)).all()) == 1
+
+            # A second account uses an independent cookie session and cannot see Alice's jobs.
+            page.locator("#register-username").fill("bob")
+            page.locator("#register-password").fill(password)
+            page.locator("#register-password-confirm").fill(password)
+            with page.expect_response(
+                lambda response: (
+                    urlparse(response.url).path == "/v1/auth/register"
+                    and response.request.method == "POST"
+                )
+            ) as second:
+                page.locator("#register-form").get_by_role(
+                    "button", name="Create account", exact=True
+                ).click()
+            assert second.value.status == 201
+            playwright.expect(page.locator("#username")).to_have_text("bob")
+            playwright.expect(page.locator("#admin")).to_be_hidden()
+            playwright.expect(page.locator("#job-list li")).to_have_count(0)
+            for suffix in ("", "/result", "/report"):
+                assert page.request.get(f"{origin}/v1/jobs/{alice_job}{suffix}").status == 404
+            assert (
+                page.request.delete(
+                    f"{origin}/v1/jobs/{alice_job}",
+                    headers={"Origin": origin, "X-CSRF-Token": second.value.json()["csrf_token"]},
+                ).status
+                == 404
+            )
+            with page.expect_response(
+                lambda response: (
+                    urlparse(response.url).path == "/v1/recipes"
+                    and response.request.method == "POST"
+                )
+            ) as bob_submitted:
+                page.locator("#generate").click()
+            assert bob_submitted.value.status == 202
+            bob_job = bob_submitted.value.json()["job_id"]
+            assert bob_job != alice_job
+            page.get_by_role("button", name="Sign out", exact=True).click()
+            playwright.expect(page.locator("#signin-panel")).to_be_visible()
+            page.locator("#auth-login-tab").click()
+            page.locator("#login-username").fill("alice")
+            page.locator("#login-password").fill(password)
+            page.locator("#password-form").get_by_role(
+                "button", name="Sign in with password"
+            ).click()
+            playwright.expect(page.locator("#username")).to_have_text("alice")
+            playwright.expect(page.locator("#job-list li")).to_have_count(1)
+            assert page.request.get(f"{origin}/v1/jobs/{bob_job}").status == 404
+            assert page.locator("#login-password").input_value() == ""
+            assert page.evaluate("localStorage.length + sessionStorage.length") == 0
+            page.screenshot(path=screenshot, full_page=True)
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            print(f"Registration browser screenshot: {screenshot}")
+            assert not errors, errors
+        finally:
+            context.close()
+            browser.close()
 
 
 def test_desktop_mobile_recipe_offers_reports_relogin_and_isolation(

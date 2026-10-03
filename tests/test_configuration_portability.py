@@ -235,12 +235,14 @@ def test_backend_shared_schema_matches_all_nonsecret_fields(isolated):
     assert configuration._SCHEMAS["backend"] == BackendSettings.model_fields.keys() - credentials
     shared = isolated / "shared.toml"
     shared.write_text(
-        "[backend]\npassword_login_enabled = true\ncookie_sessions_enabled = true\n"
+        "[backend]\npassword_login_enabled = true\nregistration_enabled = true\n"
+        "cookie_sessions_enabled = true\n"
         'cookie_secure = false\ntrusted_origin = "http://localhost"\nauth_rate_limit = 12\n'
         "auth_rate_window_seconds = 120\nrefresh_cooldown_seconds = 60\n"
     )
     values = configuration.shared_defaults("backend", shared)
     assert values["password_login_enabled"] is True
+    assert values["registration_enabled"] is True
     assert values["refresh_cooldown_seconds"] == 60
 
 

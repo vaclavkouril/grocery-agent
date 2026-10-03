@@ -9,20 +9,61 @@
   <script type="module" src="/assets/app.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   <header class="masthead">
     <a class="brand" href="/">grocery<span>agent</span><span class="brand-dot" aria-hidden="true">●</span></a>
     <span class="eyebrow">GOOD FOOD, GROUNDED IN REAL PRICES</span>
     <div id="account" hidden><span id="username"></span><button id="signout" class="quiet">Sign out</button></div>
   </header>
-  <main>
+  <main id="main-content" tabindex="-1">
     <div id="notice" role="status" aria-live="polite" hidden></div>
     <section id="signin-panel" class="welcome">
-      <div><span class="eyebrow">FROM YOUR PANTRY TO YOUR PLATE</span><h1>A little planning.<br>A better next meal.</h1><p class="lede">Make the most of what you have. Find recipes with clear nutrition, grocery quotes, and a shopping plan.</p><div class="welcome-note"><span aria-hidden="true">↗</span> Your pantry and reports belong to your account.</div></div>
+      <div class="welcome-story">
+        <span class="eyebrow">FROM YOUR PANTRY TO YOUR PLATE</span>
+        <h1>A little planning.<br>A <em>better</em> next meal.</h1>
+        <p class="lede">Start with what you have. Find a meal that fits your budget, with clear nutrition and a shopping list you can actually use.</p>
+        <a class="welcome-cta" href="#signin-heading">Go to sign in <span aria-hidden="true">↓</span></a>
+        <figure class="meal-visual">
+          <div class="meal-illustration">
+            <svg viewBox="0 0 480 228" aria-hidden="true" focusable="false">
+              <ellipse cx="250" cy="188" rx="116" ry="12" fill="#d6cbbb" opacity=".5"/>
+              <path d="M30 185C83 162 107 192 151 170M335 66c43-23 62 7 112-17" fill="none" stroke="#d4c6af" stroke-width="2" stroke-dasharray="5 7"/>
+              <ellipse cx="248" cy="115" rx="120" ry="75" fill="#fffdf7" stroke="#cfcdbb" stroke-width="2"/>
+              <ellipse cx="248" cy="115" rx="99" ry="58" fill="#e9ead8" stroke="#d4d7bf"/>
+              <path d="M158 115c17-34 64-43 98-25 23 11 25 45 7 67-43 9-89-7-105-42" fill="#f7f1da"/>
+              <g stroke="#d9caa8" stroke-width="3" stroke-linecap="round"><path d="m183 110 8 4m14-17 7 4m-4 23 9 1m-31 13 9-2m40-21 7 4m-23 20 8 3m13-44 7 2"/></g>
+              <g fill="#47704b"><ellipse cx="284" cy="79" rx="16" ry="30" transform="rotate(35 284 79)"/><ellipse cx="312" cy="93" rx="15" ry="28" transform="rotate(70 312 93)"/><ellipse cx="304" cy="118" rx="14" ry="27" transform="rotate(110 304 118)"/></g>
+              <path d="m272 101 34-37m-26 43 54-20m-45 26 37 13" fill="none" stroke="#a0b387" stroke-width="2"/>
+              <g fill="#e6a778" stroke="#ce8e61" stroke-width="1.5"><path d="M254 124c8-10 33-8 42 0l-6 15c-13 7-35 7-43-3z"/><path d="M259 146c11-5 29-5 39 1l-6 14c-11 5-25 4-35-1z"/></g>
+              <g fill="#84925c"><ellipse cx="103" cy="76" rx="10" ry="19" transform="rotate(-40 103 76)"/><ellipse cx="121" cy="65" rx="9" ry="18" transform="rotate(30 121 65)"/></g>
+              <path d="m105 93 12-37" stroke="#607347" stroke-width="2"/>
+              <circle cx="378" cy="165" r="15" fill="#efbd98"/><path d="m373 148 5 6 7-4" fill="none" stroke="#607347" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+            <span class="ingredient-note pantry-note"><span class="note-dot" aria-hidden="true"></span>Rice from your pantry</span>
+            <span class="ingredient-note shopping-note"><span class="note-dot" aria-hidden="true"></span>A few fresh additions</span>
+          </div>
+          <figcaption><span class="example-label">AN EXAMPLE</span><span>What you own</span><span aria-hidden="true">+</span><span>What you need</span><span aria-hidden="true">→</span><strong>A plan for dinner</strong></figcaption>
+        </figure>
+        <div class="welcome-note"><span aria-hidden="true">↗</span> Your pantry and reports belong to your account.</div>
+      </div>
       <div class="card signin-card">
-        <h2>Welcome back</h2><p>Sign in with your configured account or private session token.</p>
-        <form id="password-form" hidden><label for="login-username">Username</label><input id="login-username" required autocomplete="username" maxlength="64"><label for="login-password">Password</label><input id="login-password" type="password" required autocomplete="current-password" minlength="15" maxlength="1024"><button type="submit">Sign in with password</button></form>
-        <form id="signin-form"><label for="session-token">Session token</label><input id="session-token" type="password" required autocomplete="off" minlength="20" maxlength="200"><button type="submit">Sign in</button></form>
-        <details><summary>Have an invitation?</summary><form id="invite-form"><label for="invite-token">Invitation token</label><input id="invite-token" type="password" required autocomplete="off" minlength="20" maxlength="200"><label id="invite-password-label" for="invite-password" hidden>Set an optional password</label><input id="invite-password" hidden type="password" autocomplete="new-password" minlength="15" maxlength="1024"><button type="submit" class="secondary">Accept invitation</button></form></details>
+        <span class="eyebrow">YOUR OWN LITTLE KITCHEN</span>
+        <h2 id="signin-heading" tabindex="-1">Welcome back</h2><p id="signin-description">Plan from your pantry and pick up your meal reports.</p>
+        <div id="auth-tabs" class="auth-tabs" role="tablist" aria-label="Account access" hidden>
+          <button id="auth-login-tab" type="button" role="tab" aria-selected="true" aria-controls="password-form">Sign in</button>
+          <button id="auth-register-tab" type="button" role="tab" aria-selected="false" aria-controls="register-form" tabindex="-1">Create account</button>
+        </div>
+        <form id="password-form" role="tabpanel" aria-labelledby="auth-login-tab" hidden><label for="login-username">Username</label><input id="login-username" required autocomplete="username" maxlength="64"><label for="login-password">Password</label><input id="login-password" type="password" required autocomplete="current-password" minlength="15" maxlength="1024"><button type="submit">Sign in with password</button></form>
+        <form id="register-form" role="tabpanel" aria-labelledby="auth-register-tab" aria-describedby="register-account-note" hidden>
+          <p id="register-account-note" class="form-note">Create a private username account to plan meals and keep your reports together. Your username is not a verified email address.</p>
+          <div><label for="register-username">Choose a username</label><input id="register-username" name="username" required pattern="[a-zA-Z0-9_-]{1,64}" minlength="1" maxlength="64" autocomplete="username" autocapitalize="none" spellcheck="false" aria-describedby="register-username-hint"><span id="register-username-hint" class="hint">1–64 letters, numbers, underscores, or hyphens.</span></div>
+          <div><label for="register-password">Create a password</label><input id="register-password" name="password" type="password" required autocomplete="new-password" minlength="15" maxlength="1024" aria-describedby="register-password-hint"><span id="register-password-hint" class="hint">At least 15 characters. A memorable passphrase works well.</span></div>
+          <div><label for="register-password-confirm">Confirm your password</label><input id="register-password-confirm" name="password-confirm" type="password" required autocomplete="new-password" minlength="15" maxlength="1024"></div>
+          <p id="register-error" class="form-error" role="status" aria-live="polite" aria-atomic="true"></p>
+          <button type="submit">Create account</button>
+        </form>
+        <details id="token-access" class="auth-alternative" open><summary>Sign in with a session token</summary><form id="signin-form"><label for="session-token">Session token</label><input id="session-token" type="password" required autocomplete="off" minlength="20" maxlength="200"><button type="submit">Sign in</button></form></details>
+        <details class="auth-alternative"><summary>Have an invitation?</summary><form id="invite-form"><label for="invite-token">Invitation token</label><input id="invite-token" type="password" required autocomplete="off" minlength="20" maxlength="200"><label id="invite-password-label" for="invite-password" hidden>Set an optional password</label><input id="invite-password" hidden type="password" autocomplete="new-password" minlength="15" maxlength="1024"><button type="submit" class="secondary">Accept invitation</button></form></details>
         <p class="hint">Bearer tokens stay in memory. If enabled, secure browser sessions survive reloads until you sign out.</p>
       </div>
     </section>
@@ -36,17 +77,18 @@
             <fieldset class="pantry"><legend>Already in your pantry</legend><p class="hint">Use grams, kilograms, or “available” for enough stock.</p><div id="pantry-rows"></div><button type="button" id="add-pantry" class="quiet">+ Add an ingredient</button></fieldset>
             <details class="preferences"><summary>Ingredients & generation preferences</summary><div class="field-grid"><div><label for="exclusions">Exclude ingredients</label><select id="exclusions" multiple size="5"></select></div><div><label for="provider">Recipe provider</label><select id="provider" required></select><label for="model">Model</label><select id="model"></select><label for="cache-policy">Grocery cache policy</label><select id="cache-policy" required></select></div></div></details>
             <details class="preferences"><summary>Nutrition, shopping & cooking limits</summary><div class="field-grid"><div><label for="min-protein">Minimum protein · g per serving</label><input id="min-protein" type="text" inputmode="decimal" placeholder="Configured minimum"><label for="max-kcal">Maximum calories per serving</label><input id="max-kcal" type="text" inputmode="decimal" placeholder="Configured maximum"><label for="max-minutes">Maximum cooking time · minutes</label><input id="max-minutes" type="number" min="1" max="480"></div><div><label for="recipe-retailers">Retailer IDs · comma-separated</label><input id="recipe-retailers" placeholder="Configured retailers"><label for="recipe-loyalty">Loyalty prices</label><select id="recipe-loyalty"><option value="">Configured preference</option><option value="true">Allow loyalty prices</option><option value="false">Exclude loyalty prices</option></select><label for="use-first">Prioritize owned ingredients</label><select id="use-first" multiple size="3"></select><label class="checkbox"><input id="have-seasonings" type="checkbox"> I have oil and seasonings</label></div></div></details>
-            <label for="recipe-sources">Grocery sources</label><select id="recipe-sources" multiple size="2"></select>
+            <div class="request-action"><button id="generate" type="submit">Find my next meal <span aria-hidden="true">→</span></button><p class="hint">Your plan brings the recipe, nutrition, and shopping list together.</p></div>
+            <details class="preferences source-preferences" open><summary>Grocery sources & saved profiles</summary><div class="disclosure-content"><label for="recipe-sources">Grocery sources</label><select id="recipe-sources" multiple size="2"></select>
             <label for="recipe-profile">Saved grocery profile · primary source</label><select id="recipe-profile"><option value="">Default profile for selected cache policy</option></select><div id="extra-source-profiles"></div><p class="hint">Cache-only never scrapes. Other permitted policies may refresh the selected sources; no-cache requires a successful refresh.</p>
-            <button id="generate" type="submit">Find my next meal <span aria-hidden="true">→</span></button>
+            </div></details>
           </form>
         </section>
         <section class="card result-card" aria-labelledby="result-heading"><div class="section-heading"><span class="step">02</span><div><h2 id="result-heading">Your meal plan</h2><p id="job-progress" role="status" aria-live="polite">A recipe starts with a few good ingredients.</p></div></div><div id="current-job" hidden><p id="job-reference" class="hint"></p><div class="button-row"><button id="check-job" class="quiet">Check progress</button><button id="cancel-job" class="quiet">Cancel request</button></div></div><div id="result"><div class="empty-state"><span aria-hidden="true">◌</span><p>Your recipes will appear here, with nutrition, a shopping list, and preparation steps.</p></div></div><div id="downloads" class="button-row" hidden><button id="download-html" class="secondary">Download report</button><button id="download-json" class="quiet">Download JSON</button></div></section>
       </div>
       <section id="offers" class="card wide-card"><div class="section-heading"><span class="step">03</span><div><h2>Browse grocery offers</h2><p>Compare like units and see the source behind every quote.</p></div></div>
         <form id="offers-form" class="offer-filters"><div><label for="offer-search">Find a product</label><input id="offer-search" type="search" maxlength="200" placeholder="Chicken, rice, carrots…"></div><div><label for="offer-unit">Comparable unit</label><select id="offer-unit"><option value="">Any unit</option></select></div><div><label for="offer-sort">Sort by</label><select id="offer-sort"><option value="name">Product name</option><option value="unit_price">Unit price</option></select></div><div><label for="offer-retailer">Retailer ID · optional</label><input id="offer-retailer" placeholder="billa" maxlength="64"></div><label class="checkbox"><input id="offer-loyalty" type="checkbox"> Include loyalty offers</label><button type="submit" class="secondary">Search offers</button></form>
-        <label for="offer-source">Grocery source</label><select id="offer-source"></select><label for="offer-profile">Saved grocery profile</label><select id="offer-profile"><option value="">Legacy catalogue · coverage unknown</option></select>
-        <p id="offer-status" role="status" aria-live="polite">Search the saved catalogue to explore current offers.</p><div class="table-scroll"><table><caption class="sr-only">Eligible saved grocery offers</caption><thead><tr><th>Product</th><th>Retailer</th><th>Quoted price</th><th>Unit price</th><th>Observed</th></tr></thead><tbody id="offer-rows"></tbody></table></div><div class="pagination"><button id="offers-prev" class="quiet" disabled>← Previous</button><span id="offers-count"></span><button id="offers-next" class="quiet" disabled>Next →</button></div>
+        <details class="preferences catalogue-preferences" open><summary>Catalogue source & saved profile</summary><div class="field-grid disclosure-content"><div><label for="offer-source">Grocery source</label><select id="offer-source"></select></div><div><label for="offer-profile">Saved grocery profile</label><select id="offer-profile"><option value="">Legacy catalogue · coverage unknown</option></select></div></div></details>
+        <p id="offer-status" role="status" aria-live="polite">Search the saved catalogue to explore current offers.</p><div class="table-scroll" tabindex="0" role="region" aria-label="Grocery offers table; scroll to see all columns"><table><caption class="sr-only">Eligible saved grocery offers</caption><thead><tr><th scope="col">Product</th><th scope="col">Retailer</th><th scope="col">Quoted price</th><th scope="col">Unit price</th><th scope="col">Observed</th></tr></thead><tbody id="offer-rows"></tbody></table></div><div class="pagination"><button id="offers-prev" class="quiet" disabled>← Previous</button><span id="offers-count"></span><button id="offers-next" class="quiet" disabled>Next →</button></div>
       </section>
       <section id="jobs" class="card wide-card"><div class="section-heading"><span class="step">04</span><div><h2>Your requests</h2><p>Pick up a plan after closing the browser.</p></div><button id="reload-jobs" class="quiet">Refresh</button></div><ul id="job-list" class="job-list"></ul><div class="pagination"><button id="jobs-prev" class="quiet" disabled>← Previous</button><span id="jobs-count"></span><button id="jobs-next" class="quiet" disabled>Next →</button></div></section>
       <section id="admin" class="card wide-card" hidden><h2>Administrator</h2><div class="field-grid"><form id="new-invite-form"><label for="invite-username">Invite username</label><input id="invite-username" required pattern="[a-zA-Z0-9_-]{1,64}" maxlength="64"><button class="secondary">Create invitation</button><output id="new-invite-token" class="token-output"></output><p class="hint">Share the invitation privately. It expires in 24 hours.</p></form><div><label for="refresh-source">Refresh source</label><select id="refresh-source"></select><label for="refresh-profile">Acquisition profile</label><select id="refresh-profile"></select><button id="refresh-catalogue" class="secondary">Request grocery refresh</button><p class="hint">A separate worker collects and publishes the run. Matching refreshes are coalesced with a cooldown.</p></div></div></section>

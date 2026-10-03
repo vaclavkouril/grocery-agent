@@ -94,8 +94,8 @@ another container. Provider and real-retailer acceptance runs remain operator-co
 ## Optional password and browser sessions
 
 Bearer-only operation remains the default. Enable `password_login_enabled` to use
-`POST /v1/auth/login` with `{username,password}`; only invited or locally bootstrapped accounts
-exist. Accepting an invitation may include an optional password. Bootstrap supports
+`POST /v1/auth/login` with `{username,password}`. Unless self-registration is enabled, only
+invited or locally bootstrapped accounts exist. Accepting an invitation may include an optional password. Bootstrap supports
 `--password-stdin`; do not put passwords in command arguments. Passwords contain 15–1024 characters
 and at most 4096 UTF-8 bytes. Only versioned salted scrypt hashes are stored. Authentication
 errors are generic and durable per-identity/IP throttles apply to public authentication requests.
@@ -107,6 +107,39 @@ origin. Cookie responses return a CSRF token, never the bearer secret. Every uns
 including logout, requires `X-CSRF-Token`. The website keeps CSRF state in memory and resumes through
 safe `GET /v1/auth/session`; no token is written to browser storage. Public
 `GET /v1/auth/capabilities` advertises available authentication modes.
+
+## Optional self-registration
+
+Bootstrap your administrator **before** opening registration, then set these in backend TOML:
+
+```toml
+password_login_enabled = true
+registration_enabled = true
+```
+
+Or set `GROCERY_BACKEND_PASSWORD_LOGIN_ENABLED=true` and
+`GROCERY_BACKEND_REGISTRATION_ENABLED=true` in the backend service environment. Restart the API
+to apply configuration. Registration remains disabled by default, including the sample config;
+existing invite-only deployments are not automatically opened. This change needs no new database
+migration beyond the existing current control schema.
+
+The website displays **Create account** when enabled. `POST /v1/auth/register` accepts
+`{username,password,session_mode}` and returns HTTP 201 with the same session response as login.
+Usernames are case-sensitive, 1–64 ASCII letters, digits, hyphens or underscores; passwords follow
+the bounds above. New accounts always have the ordinary `user` role. Duplicate names return 409
+without changing existing credentials, role or account status. Account/session creation is atomic,
+including concurrent attempts. Public requests consume durable per-client, identity and global
+registration rate budgets before password hashing; exhausted budgets return 429 and `Retry-After`.
+Password hashing and verification share a two-operation concurrency limit per API process,
+bounding scrypt memory use across HTTP worker threads. Multiple API processes each have their
+own limit; size your deployment accordingly.
+
+This is username/password registration, **not email verification or password recovery**. Registering
+does not create an email or SimpleX binding; those still require their separate verification flow.
+Use HTTPS and secure cookie sessions for remote browser deployments. If access should remain
+restricted, leave registration off and use invitations. Public registration lets new users submit
+allowed recipe jobs, potentially incurring provider costs; review provider permissions and queue
+limits before enabling it. Administrator operations remain separately protected.
 
 ## Jobs, recovery and channels
 

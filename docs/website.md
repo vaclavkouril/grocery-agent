@@ -2,7 +2,10 @@
 
 With the backend and worker running as described in [backend.md](backend.md), open
 `http://127.0.0.1:8001/`. Paste a privately issued bearer session, or accept an administrator's
-one-use invitation. Optional password login is shown when enabled. Bearer sessions live only in page
+one-use invitation. Optional password login and self-registration are shown when enabled.
+To display **Create account**, enable both `password_login_enabled` and `registration_enabled`
+in the backend configuration; see [registration setup](backend.md#optional-self-registration).
+Creating an account signs in immediately as an ordinary user. Bearer sessions live only in page
 memory; optional secure cookie sessions resume after reloading. Sign out revokes either session. Use HTTPS for remote access; do not
 put tokens in URLs, shell history, committed files or screenshots.
 
@@ -13,6 +16,14 @@ unfinished work, and download the private JSON/HTML report. Offers include obser
 retailer/source provenance and freshness warnings. Recent jobs are paginated and owner-only.
 Administrators additionally see invitation creation and configured source/profile refresh controls.
 Optional nutrition, cooking-time, retailer/loyalty and pantry-priority controls follow the request schema.
+
+The interface uses a responsive cream/forest/apricot theme, system fonts and a local SVG illustration;
+it needs no design-service connection, CDN or frontend framework. Meal and pantry controls are
+the primary workflow; technical provider, nutrition and grocery-profile choices use disclosures.
+Keyboard navigation includes a skip link, account-tab arrow keys, visible focus and a scrollable
+offers region. Touch controls are at least 44px high and reduced-motion preferences are respected.
+Sign-up includes password confirmation and inline errors; busy controls prevent repeated submissions.
+Pantry amounts are saved with each submitted request/report, not as an automatically restored pantry form.
 
 Backend limits come from capabilities: cache-only remains the default, while explicit configuration
 can enable recipe-driven refresh and combined compatible sources. Browser controls select sources

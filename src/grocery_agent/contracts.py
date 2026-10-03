@@ -48,6 +48,7 @@ class Capabilities(DomainModel):
     refresh_allowed: bool
     refresh_profiles: dict[str, tuple[str, ...]] = Field(default_factory=dict)
     password_login: bool = False
+    registration: bool = False
     cookie_sessions: bool = False
     session_modes: tuple[str, ...] = ("bearer",)
     email_enabled: bool

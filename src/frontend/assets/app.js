@@ -6,6 +6,8 @@ const $ = id => document.getElementById(id);
 let capabilities, currentJob, result, timer, generation = 0, authCapabilities = {};
 let offerOffset = 0, jobsOffset = 0, offerParameters = {}, pendingSubmission;
 let collectionsBySource = {};
+let authenticationBusy = false, recipeBusy;
+let jobsEmpty;
 const pageSize = 10;
 
 function node(tag, text, className) {
@@ -15,6 +17,67 @@ function node(tag, text, className) {
   return element;
 }
 function notice(message) { $('notice').textContent = message; $('notice').hidden = !message; }
+function clearPasswords() {
+  for (const id of ['login-password', 'invite-password', 'register-password', 'register-password-confirm']) if ($(id)) $(id).value = '';
+}
+function registrationError(message) {
+  const target = $('register-error');
+  if (target) { target.textContent = message; target.hidden = !message; }
+}
+function authenticationMode(register = false, focus = false) {
+  register = register && authCapabilities.registration === true;
+  if ($('auth-tabs')) $('auth-tabs').hidden = authCapabilities.registration !== true;
+  for (const [id, selected] of [['auth-login-tab', !register], ['auth-register-tab', register]]) {
+    const tab = $(id);
+    if (tab) { tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1; }
+  }
+  $('password-form').hidden = register || !authCapabilities.password_login;
+  $('signin-form').hidden = register;
+  const tokenAccess = $('signin-form').closest('details');
+  if (tokenAccess) { tokenAccess.hidden = register; tokenAccess.open = !authCapabilities.password_login; }
+  $('invite-form').hidden = register;
+  const invitation = $('invite-form').closest('details');
+  if (invitation) invitation.hidden = register;
+  if ($('register-form')) $('register-form').hidden = !register;
+  if ($('signin-heading')) $('signin-heading').textContent = register ? 'Create your account' : 'Welcome back';
+  if ($('signin-description')) $('signin-description').textContent = register ? 'Choose a username and password to plan meals and keep your reports together.' : 'Plan from your pantry and pick up your meal reports.';
+  clearPasswords(); registrationError('');
+  if ($('register-password-confirm')) $('register-password-confirm').removeAttribute('aria-invalid');
+  if (focus) $(register ? 'register-username' : authCapabilities.password_login ? 'login-username' : 'session-token')?.focus();
+}
+async function authenticate(form, request, registration = false, resume = false) {
+  if (authenticationBusy) return;
+  authenticationBusy = true;
+  const active = generation;
+  let expected = active;
+  const controls = [...document.querySelectorAll('#signin-panel input, #signin-panel button')].map(element => [element, element.disabled]);
+  const submit = form.querySelector('button[type="submit"]');
+  const submitContent = submit ? [...submit.childNodes] : [];
+  if (submit) submit.textContent = registration ? 'Creating account…' : 'Signing in…';
+  for (const [element] of controls) element.disabled = true;
+  form.setAttribute('aria-busy', 'true'); notice(''); registrationError(''); clearPasswords();
+  try {
+    await request();
+    if (active !== generation) { api.clearSession(); return; }
+    expected = generation + 1;
+    await activateSession();
+    if (!resume && expected === generation && capabilities && !$('workspace').hidden) $('meal-style').focus();
+  } catch (error) {
+    if (expected !== generation) return;
+    api.clearSession();
+    if (resume && error instanceof ApiError && error.status === 401) return;
+    if (capabilities) { endSession(); notice('Could not load your account. Please sign in again.'); return; }
+    const message = registration && error instanceof ApiError && error.status === 401
+      ? 'Could not create your account. Check your details and try again.'
+      : error.message ?? 'Could not sign in. Please try again.';
+    if (registration) { registrationError(message); $('register-username')?.focus(); }
+    else notice(message);
+  } finally {
+    clearPasswords(); authenticationBusy = false; form.removeAttribute('aria-busy');
+    if (submit) submit.replaceChildren(...submitContent);
+    for (const [element, disabled] of controls) element.disabled = disabled;
+  }
+}
 async function run(action) {
   const start = generation;
   try { await action(); } catch (error) {
@@ -27,10 +90,11 @@ async function run(action) {
 function endSession() {
   generation += 1; clearTimeout(timer); api.clearSession(); capabilities = undefined;
   currentJob = undefined; result = undefined; pendingSubmission = undefined;
+  recipeBusy = undefined; $('recipe-form').removeAttribute('aria-busy'); $('generate').disabled = true;
   collectionsBySource = {}; $('extra-source-profiles').replaceChildren();
   $('workspace').hidden = true; $('account').hidden = true; $('signin-panel').hidden = false;
   $('session-token').value = ''; $('invite-token').value = '';
-  $('login-password').value = ''; $('invite-password').value = '';
+  clearPasswords(); authenticationMode();
   $('pantry-rows').replaceChildren(); $('result').replaceChildren(); $('job-list').replaceChildren();
   for (const id of ['recipe-profile', 'offer-profile']) options($(id), [['', 'Legacy catalogue · coverage unknown']]);
   $('offer-rows').replaceChildren(); $('new-invite-token').textContent = '';
@@ -65,7 +129,7 @@ function setModel() {
   options($('model'), provider === 'codex' ? [['', 'Configured CLI default'], ...models.map(id => [id, id])] : models.map(id => [id, id]));
   $('model').disabled = provider === 'template';
   const unavailable = provider === 'ollama' && models.length === 0;
-  $('generate').disabled = !provider || unavailable;
+  $('generate').disabled = recipeBusy?.generation === generation || !provider || unavailable;
   if (unavailable) notice('No local model is configured for this provider. Choose another provider.');
 }
 function addPantry() {
@@ -88,7 +152,7 @@ async function activateSession(token) {
   capabilities = supported; $('username').textContent = user.username;
   $('signin-panel').hidden = true; $('account').hidden = false; $('workspace').hidden = false;
   $('session-token').value = ''; $('invite-token').value = '';
-  $('login-password').value = ''; $('invite-password').value = '';
+  clearPasswords(); registrationError('');
   $('coverage').textContent = `${supported.sources.join(', ')} · ${supported.location_label ?? supported.scope}`;
   options($('provider'), supported.providers.map(id => [id, id === 'template' ? 'Configured recipes' : id]), supported.default_provider);
   options($('cache-policy'), supported.cache_policies.map(id => [id, id === 'cache-only' ? 'Saved grocery data only' : id]), supported.default_cache_policy);
@@ -109,7 +173,10 @@ async function activateSession(token) {
   options($('refresh-source'), supported.sources.map(source => [source, source])); refreshProfiles();
   $('pantry-rows').replaceChildren(); addPantry(); setModel();
   currentJob = undefined; result = undefined; offerOffset = jobsOffset = 0;
-  $('result').replaceChildren(node('p', 'Submit a request to see your recipes.', 'hint'));
+  const empty = node('div', undefined, 'empty-state');
+  const marker = node('span', '◌'); marker.setAttribute('aria-hidden', 'true');
+  empty.append(marker, node('h3', 'Your next meal starts here'), node('p', 'Choose your servings and pantry ingredients, then find a recipe. Your plan will include nutrition, a shopping list, and cooking steps.'));
+  $('result').replaceChildren(empty);
   $('job-progress').textContent = 'Ready when you are.';
   notice(''); await loadJobs();
   if (active !== generation) return;
@@ -134,6 +201,9 @@ function showJob(job) {
   currentJob = job; $('current-job').hidden = false; $('job-reference').textContent = `Request ${job.job_id}`;
   $('job-progress').textContent = `${job.kind === 'refresh' ? 'Grocery refresh' : 'Recipe request'}: ${job.status} · ${job.phase}`;
   $('cancel-job').hidden = !['queued', 'running'].includes(job.status);
+  if (['queued', 'running'].includes(job.status)) {
+    $('result').replaceChildren(node('p', job.status === 'queued' ? 'Your request is queued. Recipes will appear here when it finishes.' : 'Your request is running. You can keep planning while we check for results.', 'hint'));
+  }
 }
 async function selectJob(job) {
   clearTimeout(timer); result = undefined; $('downloads').hidden = true;
@@ -187,6 +257,9 @@ async function loadJobs() {
   const active = generation; const page = await api.jobs(jobsOffset, pageSize);
   if (active !== generation) return;
   $('job-list').replaceChildren();
+  if (!jobsEmpty) { jobsEmpty = node('p', undefined, 'hint'); $('job-list').after(jobsEmpty); }
+  jobsEmpty.hidden = page.items.length > 0;
+  jobsEmpty.textContent = page.total ? 'No requests on this page. Go back to see earlier requests.' : 'No requests yet. Choose your meal and pantry ingredients to create your first recipe request.';
   for (const job of page.items) {
     const item = node('li'); item.append(node('span', `${job.kind === 'refresh' ? 'Grocery refresh' : 'Recipe'} · ${job.status} · ${new Date(job.created_at).toLocaleString()}`));
     const open = node('button', 'Open', 'quiet'); open.addEventListener('click', () => run(() => selectJob(job))); item.append(open); $('job-list').append(item);
@@ -218,24 +291,46 @@ function download(body, type, filename) {
   link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-$('signin-form').addEventListener('submit', event => { event.preventDefault(); run(async () => {
-  try { await activateSession($('session-token').value.trim()); } catch (error) { endSession(); notice(error.message); }
-}); });
-$('invite-form').addEventListener('submit', event => { event.preventDefault(); run(async () => {
-  await api.acceptInvitation($('invite-token').value.trim(), $('invite-password').value, authCapabilities.cookie_sessions ? 'cookie' : 'bearer');
-  await activateSession();
-}); });
-$('password-form').addEventListener('submit', event => { event.preventDefault(); run(async () => {
-  const password = $('login-password').value; $('login-password').value = '';
-  await api.login($('login-username').value.trim(), password, authCapabilities.cookie_sessions ? 'cookie' : 'bearer');
-  await activateSession();
-}); });
+for (const [id, register] of [['auth-login-tab', false], ['auth-register-tab', true]]) {
+  $(id)?.addEventListener('click', () => { if (!authenticationBusy) authenticationMode(register, true); });
+  $(id)?.addEventListener('keydown', event => {
+    if (authenticationBusy || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const target = event.key === 'Home' ? false : event.key === 'End' ? true : !register;
+    authenticationMode(target); $(target ? 'auth-register-tab' : 'auth-login-tab')?.focus();
+  });
+}
+$('signin-form').addEventListener('submit', event => {
+  event.preventDefault(); const token = $('session-token').value.trim(); $('session-token').value = '';
+  authenticate(event.currentTarget, () => api.setSession({token, session_mode: 'bearer'}));
+});
+$('invite-form').addEventListener('submit', event => {
+  event.preventDefault(); const token = $('invite-token').value.trim(), password = $('invite-password').value;
+  $('invite-token').value = '';
+  authenticate(event.currentTarget, () => api.acceptInvitation(token, password, authCapabilities.cookie_sessions ? 'cookie' : 'bearer'));
+});
+$('password-form').addEventListener('submit', event => {
+  event.preventDefault(); const username = $('login-username').value.trim(), password = $('login-password').value;
+  authenticate(event.currentTarget, () => api.login(username, password, authCapabilities.cookie_sessions ? 'cookie' : 'bearer'));
+});
+$('register-form')?.addEventListener('submit', event => {
+  event.preventDefault();
+  if (authenticationBusy || authCapabilities.registration !== true) return;
+  const username = $('register-username').value.trim(), password = $('register-password').value;
+  if (password !== $('register-password-confirm').value) {
+    clearPasswords(); registrationError('Passwords do not match. Please enter the same password in both fields.');
+    $('register-password-confirm').setAttribute('aria-invalid', 'true'); $('register-password').focus(); return;
+  }
+  $('register-password-confirm').removeAttribute('aria-invalid');
+  authenticate(event.currentTarget, () => api.register(username, password, authCapabilities.cookie_sessions ? 'cookie' : 'bearer'), true);
+});
 $('signout').addEventListener('click', () => run(async () => { try { await api.logout(); } finally { endSession(); notice('Signed out.'); } }));
 $('provider').addEventListener('change', () => { notice(''); setModel(); });
 $('recipe-sources').addEventListener('change', sourceProfiles);
 $('offer-source').addEventListener('change', () => { options($('offer-profile'), profileEntries($('offer-source').value)); offerParameters = {}; offerOffset = 0; $('offer-rows').replaceChildren(); pagination('offers', 0, 0, pageSize); });
 $('add-pantry').addEventListener('click', addPantry);
 $('recipe-form').addEventListener('submit', event => { event.preventDefault(); run(async () => {
+  if (recipeBusy?.generation === generation) return;
   const body = recipePayload({provider: $('provider').value, model: $('model').disabled ? '' : $('model').value, cache_policy: $('cache-policy').value, meal_style: $('meal-style').value, servings: $('servings').value, max_stores: $('max-stores').value, budget: $('budget').value.trim(), exclusions: [...$('exclusions').selectedOptions].map(option => option.value)}, capabilities, [...$('pantry-rows').children].map(row => ({ingredient: row.querySelector('select').value, quantity: row.querySelector('input').value.trim()})));
   body.source_ids = selectedSources();
   if (!body.source_ids.length) throw new Error('Choose at least one grocery source.');
@@ -252,10 +347,12 @@ $('recipe-form').addEventListener('submit', event => { event.preventDefault(); r
     allow_loyalty: $('recipe-loyalty').disabled || !$('recipe-loyalty').value ? undefined : $('recipe-loyalty').value === 'true', use_first: $('use-first').disabled ? [] : [...$('use-first').selectedOptions].map(option => option.value), seasonings_available: !$('have-seasonings').disabled && $('have-seasonings').checked ? true : undefined}, capabilities, [...$('pantry-rows').children].map(row => ({ingredient: row.querySelector('select').value, quantity: row.querySelector('input').value.trim()})));
   for (const field of ['min_protein_g', 'max_kcal', 'max_minutes', 'retailer_ids', 'allow_loyalty', 'use_first', 'seasonings_available']) if (Object.hasOwn(extra, field)) body[field] = extra[field];
   const serialized = JSON.stringify(body); if (pendingSubmission?.serialized !== serialized) pendingSubmission = {serialized, key: crypto.randomUUID()};
-  const active = generation; $('generate').disabled = true; notice('');
+  const active = generation, submission = {generation: active}; recipeBusy = submission; $('generate').disabled = true; $('recipe-form').setAttribute('aria-busy', 'true'); notice('');
   try { const job = await api.submit(body, pendingSubmission.key); if (active !== generation) return;
     pendingSubmission = undefined; await selectJob(job); await loadJobs();
-  } finally { if (active === generation) setModel(); }
+  } finally {
+    if (recipeBusy === submission) { recipeBusy = undefined; $('recipe-form').removeAttribute('aria-busy'); if (active === generation) setModel(); }
+  }
 }); });
 $('check-job').addEventListener('click', () => run(checkJob));
 $('cancel-job').addEventListener('click', () => run(async () => { const id = currentJob.job_id; await api.cancel(id); if (currentJob?.job_id === id) await checkJob(); }));
@@ -280,12 +377,9 @@ async function initializeAuthentication() {
     const supported = await api.authCapabilities();
     if (active !== generation || capabilities) return;
     authCapabilities = supported;
-    $('password-form').hidden = !supported.password_login;
+    authenticationMode();
     $('invite-password').hidden = $('invite-password-label').hidden = !supported.password_login;
-    if (supported.cookie_sessions) {
-      try { await api.resume(); if (active === generation) await activateSession(); }
-      catch (error) { if (!(error instanceof ApiError && error.status === 401)) notice(error.message); }
-    }
+    if (supported.cookie_sessions && !authenticationBusy) await authenticate($('password-form'), () => api.resume(), false, true);
   } catch { /* Older backends keep the token-only interface. */ }
 }
 initializeAuthentication();
