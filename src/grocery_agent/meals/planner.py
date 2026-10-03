@@ -1,6 +1,6 @@
 import re
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from itertools import combinations
@@ -127,8 +127,7 @@ def matches(ingredient: Ingredient, offer: Offer) -> bool:
     )
 
 
-def price_order(price: IngredientPrice) -> tuple[Decimal, str, str, str, str, str, str]:
-    """Keep legacy retailer/SKU preference and resolve provenance ties consistently."""
+def _price_prefix(price: IngredientPrice) -> tuple[Decimal, str, str, str, str, str]:
     return (
         price.price_per_kg_czk,
         retailer(price),
@@ -136,8 +135,47 @@ def price_order(price: IngredientPrice) -> tuple[Decimal, str, str, str, str, st
         price.shopping_context,
         price.run_id or "",
         price.observed_at.isoformat() if price.observed_at else "",
-        price.offer.model_dump_json(exclude_computed_fields=True) if price.offer else "",
     )
+
+
+def _offer_json(price: IngredientPrice) -> str:
+    return price.offer.model_dump_json(exclude_computed_fields=True) if price.offer else ""
+
+
+def price_order(price: IngredientPrice) -> tuple[Decimal, str, str, str, str, str, str]:
+    """Keep legacy retailer/SKU preference and resolve provenance ties consistently."""
+    return (*_price_prefix(price), _offer_json(price))
+
+
+def _cheaper(candidate: IngredientPrice, previous: IngredientPrice | None) -> bool:
+    if previous is None:
+        return True
+    candidate_key, previous_key = _price_prefix(candidate), _price_prefix(previous)
+    # Serializing a complete offer is only needed for otherwise indistinguishable quotes.
+    if candidate_key != previous_key:
+        return candidate_key < previous_key
+    return _offer_json(candidate) < _offer_json(previous)
+
+
+def _baskets(
+    base: Mapping[str, IngredientPrice],
+    to_buy: Mapping[str, Decimal],
+    by_store: Mapping[tuple[str, str], IngredientPrice],
+    stores: list[str],
+    max_stores: int,
+) -> Iterator[dict[str, IngredientPrice]]:
+    """Yield complete baskets without retaining every store combination in memory."""
+    for count in range(min(max_stores, len(stores)) + 1):
+        for subset in combinations(stores, count):
+            basket = dict(base)
+            for key, grams in to_buy.items():
+                if grams == 0:
+                    continue
+                options = [by_store[(key, store)] for store in subset if (key, store) in by_store]
+                if options:
+                    basket[key] = min(options, key=price_order)
+            if to_buy.keys() <= basket.keys():
+                yield basket
 
 
 def plan_meals(
@@ -161,6 +199,16 @@ def plan_meals(
     rejected: Counter[str] = Counter()
     best: dict[str, IngredientPrice] = {}
     by_store: dict[tuple[str, str], IngredientPrice] = {}
+    matchers = [
+        (
+            key,
+            ingredient,
+            re.compile(ingredient.name_pattern),
+            re.compile(ingredient.exclude_pattern),
+        )
+        for key, ingredient in catalog.ingredients.items()
+        if ingredient.name_pattern and (not policy.lactose_free or ingredient.lactose_free)
+    ]
     for key, ingredient in catalog.ingredients.items():
         if ingredient.pantry_price_per_kg_czk is not None:
             best[key] = IngredientPrice(
@@ -189,10 +237,11 @@ def plan_meals(
         if reason:
             rejected[reason] += 1
             continue
-        for key, ingredient in catalog.ingredients.items():
-            if policy.lactose_free and not ingredient.lactose_free:
-                continue
-            if matches(ingredient, offer):
+        name = offer.product.name.casefold()
+        terms = (offer.promotion.conditions or "").casefold() if offer.promotion else ""
+        searchable = f"{name} {terms}"
+        for key, ingredient, name_pattern, exclude_pattern in matchers:
+            if name_pattern.search(name) and not exclude_pattern.search(searchable):
                 candidate = IngredientPrice(
                     ingredient_id=key,
                     label=ingredient.label,
@@ -211,9 +260,9 @@ def plan_meals(
                     else offer.product.store_id,
                 )
                 store_previous = by_store.get(store_key)
-                if store_previous is None or price_order(candidate) < price_order(store_previous):
+                if _cheaper(candidate, store_previous):
                     by_store[store_key] = candidate
-                if previous is None or price_order(candidate) < price_order(previous):
+                if _cheaper(candidate, previous):
                     best[key] = candidate
     meals: list[PlannedMeal] = []
     for recipe in catalog.recipes:
@@ -239,27 +288,9 @@ def plan_meals(
                     label=catalog.ingredients[key].label,
                     price_per_kg_czk=Decimal(0),
                 )
-        basket_options: list[dict[str, IngredientPrice]] = []
-        for count in range(0, min(policy.max_stores, len(relevant_stores)) + 1):
-            for subset in combinations(relevant_stores, count):
-                basket = dict(base)
-                for key in recipe.grams:
-                    if to_buy[key] == 0:
-                        continue
-                    options = [
-                        by_store[(key, store)] for store in subset if (key, store) in by_store
-                    ]
-                    if options:
-                        basket[key] = min(
-                            options,
-                            key=price_order,
-                        )
-                if recipe.grams.keys() <= basket.keys():
-                    basket_options.append(basket)
-        if not basket_options:
-            continue
         basket = min(
-            basket_options,
+            _baskets(base, to_buy, by_store, relevant_stores, policy.max_stores),
+            default=None,
             key=lambda option: (
                 sum(to_buy[key] * option[key].price_per_kg_czk for key in recipe.grams),
                 len(
@@ -278,6 +309,8 @@ def plan_meals(
                 tuple(price_order(option[key]) for key in recipe.grams),
             ),
         )
+        if basket is None:
+            continue
         nutrients = Nutrients(kcal="0", protein_g="0", carbs_g="0", fat_g="0")
         cost = (
             Decimal(0)

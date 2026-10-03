@@ -1,5 +1,25 @@
 # Remaining acceptance and account setup
 
+## Planner refactor verification (2026-10-02)
+
+The pre-refactor offline/browser suite passed all 1,013 tests. The planner now prepares
+ingredient regexes once per request, normalizes each eligible offer's searchable text once,
+serializes offers only when all cheaper comparison keys tie, and streams complete baskets
+instead of retaining every combination. Decimal arithmetic and the legacy tie-break order
+remain unchanged; no NumPy dependency or floating-point financial calculations were added.
+
+A local Python 3.14 synthetic benchmark used the six offers from `tests.test_meals.groceries`,
+repeated 1,000 times with unique SKU prefixes and price offsets cycling through 0–6 CZK.
+Five in-memory planning calls had median elapsed times of 1.684s before and 1.012s after
+(about 40% less time). Report JSON was byte-identical. This measures planning for that
+6,000-offer fixture, not scraping, provider inference, API latency or every catalogue size.
+Ordering parity, avoiding unnecessary serialization, and streamed combination ordering
+are covered by `tests/test_planner_optimization.py` without timing-sensitive assertions.
+After the refactor, all 1,016 offline/browser tests passed (two live tests deselected),
+along with Ruff lint/format checks, mypy on 126 source files, the frontend Node contract
+test, and wheel packaging. The upstream TestClient deprecation warning remains.
+Live-provider, retailer and deferred account checks were not repeated for this planner-only change.
+
 ## Results (2026-10-02)
 
 The final full offline/browser suite passed (1,013 tests), with two opt-in live tests deselected.
