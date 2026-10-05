@@ -1,0 +1,18 @@
+{
+  "quota": {
+    "at": "2026-10-03T16:25:44.102877+00:00",
+    "buckets": {
+      "codex": {
+        "primary": {
+          "usedPercent": 8,
+          "windowDurationMins": 10080,
+          "resetsAt": 1791584727
+        },
+        "secondary": null,
+        "planType": "prolite",
+        "rateLimitReachedType": null
+      }
+    }
+  },
+  "codex_version": "codex-cli 0.159.3"
+}

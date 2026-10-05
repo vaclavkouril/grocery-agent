@@ -260,8 +260,17 @@ def evaluate_draft(
 
 
 class MeasuredProvider:
-    def __init__(self, client: httpx.Client, model: str, timeout: int, seed: int) -> None:
+    def __init__(
+        self,
+        client: httpx.Client,
+        model: str,
+        timeout: int,
+        seed: int,
+        *,
+        think: bool | None = None,
+    ) -> None:
         self.client, self.model, self.timeout, self.seed = client, model, timeout, seed
+        self.think = think
         self.calls: list[dict[str, Any]] = []
 
     def generate(self, request: RecipeRequest, context: str) -> dict[str, Any]:
@@ -279,6 +288,7 @@ class MeasuredProvider:
             response = self.client.post(
                 "/api/generate",
                 json={
+                    **({"think": self.think} if self.think is not None else {}),
                     "model": self.model,
                     "prompt": prompt,
                     "format": draft_schema(context),
@@ -379,6 +389,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "num_thread": 2,
                 "timeout_seconds": args.timeout,
                 "repeats": args.repeats,
+                "think": getattr(args, "think", None),
             },
             "database": str(args.database.resolve()),
             "inputs_from": str(args.inputs_from.resolve()) if args.inputs_from else None,
@@ -420,7 +431,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 for repeat in range(args.repeats):
                     for name, (original, inputs, _) in prepared.items():
                         request = original.model_copy(update={"model": model})
-                        provider = MeasuredProvider(client, model, args.timeout, 17 + repeat)
+                        provider = MeasuredProvider(
+                            client,
+                            model,
+                            args.timeout,
+                            17 + repeat,
+                            think=getattr(args, "think", None),
+                        )
                         service = RecipeService(
                             Settings(meal_config=args.catalog),
                             RecipeSettings(),
@@ -485,6 +502,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--api-url", default="http://127.0.0.1:11434")
     parser.add_argument("--repeats", type=int, choices=range(1, 6), default=2)
+    parser.add_argument("--think", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument(
         "--timeout",
         type=int,

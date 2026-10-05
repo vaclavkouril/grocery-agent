@@ -1,5 +1,8 @@
 # Local recipe model benchmark on this PC
 
+For the five additional local models and budget Codex comparison, see the
+[second benchmark round](model-benchmark-round-two.md). This report preserves the original run.
+
 All five tested local models fit this PC, but none reliably generated recipes satisfying the application's constraints. Across 30 requests, seven passed the numerical filters, all breakfasts; manual review found incomplete or inconsistent instructions even among those passes. The smallest coding model had the lowest median request time at 70.5 seconds. Gemma 3 1B was the more promising of the two general-purpose models for further experiments, not a production-ready recipe writer.
 
 This report measures the actual grocery-agent machine on 2 and 3 October 2026, using its cached grocery offers and the application's recipe validation and Decimal evaluator. It compares three previously installed coding models with two newly downloaded general-purpose models. No cloud model is included, so this does not establish whether local models beat Codex or another hosted provider.
