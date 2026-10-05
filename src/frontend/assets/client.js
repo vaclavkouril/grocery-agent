@@ -1,6 +1,6 @@
 // Shared website transport source. Credentials are kept only in this instance.
 export class ApiError extends Error {
-  constructor(status, detail) { super(typeof detail === 'string' ? detail : JSON.stringify(detail)); this.status = status; }
+  constructor(status, detail, code, fields) { super(typeof detail === 'string' ? detail : JSON.stringify(detail)); this.status = status; this.code = code; this.fields = fields; }
 }
 
 export class GroceryClient {
@@ -15,9 +15,9 @@ export class GroceryClient {
     if (key) headers.set('Idempotency-Key', key);
     const response = await this.fetcher(path, {method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal, redirect: 'error', credentials: this.cookieMode ? 'same-origin' : 'omit', cache: 'no-store'});
     if (!response.ok) {
-      let detail = 'Could not complete this request.';
-      try { detail = (await response.json()).detail ?? detail; } catch { /* Response may not be JSON. */ }
-      throw new ApiError(response.status, detail);
+      let detail = 'Could not complete this request.', code, fields;
+      try { const error = await response.json(); detail = error.detail ?? detail; code = error.code; fields = error.fields; } catch { /* Response may not be JSON. */ }
+      throw new ApiError(response.status, detail, code, fields);
     }
     if (response.status === 204) return null;
     return text ? response.text() : response.json();
@@ -39,12 +39,56 @@ export class GroceryClient {
   report(id) { return this.request(`/v1/jobs/${encodeURIComponent(id)}/report`, {text: true}); }
   cancel(id) { return this.request(`/v1/jobs/${encodeURIComponent(id)}`, {method: 'DELETE'}); }
   logout() { return this.request('/v1/session', {method: 'DELETE'}); }
-  offers(parameters) { return this.request(`/v1/offers?${new URLSearchParams(parameters)}`); }
+  settings() { return this.request('/v1/me/settings'); }
+  saveSettings(body) { return this.request('/v1/me/settings', {method: 'PATCH', body}); }
+  pantry() { return this.request('/v1/me/pantry'); }
+  savePantry(items, expected_revision) { return this.request('/v1/me/pantry', {method: 'PUT', body: {items, expected_revision}}); }
+  presets() { return this.request('/v1/me/presets'); }
+  createPreset(name, parameters) { return this.request('/v1/me/presets', {method: 'POST', body: {name, parameters: presetParameters(parameters)}}); }
+  updatePreset(id, name, parameters, expected_revision) { return this.request(`/v1/me/presets/${encodeURIComponent(id)}`, {method: 'PATCH', body: {name, parameters: presetParameters(parameters), expected_revision}}); }
+  deletePreset(id, expected_revision) { return this.request(`/v1/me/presets/${encodeURIComponent(id)}?${new URLSearchParams({expected_revision})}`, {method: 'DELETE'}); }
+  bindings() { return this.request('/v1/bindings'); }
+  bind(channel, address) { return this.request('/v1/bindings', {method: 'POST', body: {channel, address}}); }
+  unbind(id) { return this.request(`/v1/bindings/${encodeURIComponent(id)}`, {method: 'DELETE'}); }
+  jobRequest(id) { return this.request(`/v1/jobs/${encodeURIComponent(id)}/request`); }
+  offers(parameters) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(parameters)) {
+      for (const item of Array.isArray(value) ? value : [value]) if (item !== undefined && item !== null && item !== '') query.append(key, String(item));
+    }
+    return this.request(`/v1/offers?${query}`);
+  }
+}
+
+export function decimal(value) { return String(value).trim().replace(',', '.'); }
+export function presetParameters(request) {
+  const {pantry, use_first, request_id, ...parameters} = request;
+  return parameters;
+}
+export function pantryItems(rows, useFirst = []) {
+  const items = {};
+  for (const {ingredient, quantity} of rows) {
+    if (!ingredient && !quantity) continue;
+    if (!ingredient || Object.hasOwn(items, ingredient)) throw new Error('Each pantry ingredient may appear only once.');
+    const amount = decimal(quantity).replace(/\s/g, '');
+    if (amount === 'available') items[ingredient] = {grams: null, use_first: useFirst.includes(ingredient)};
+    else {
+      const match = /^(\d+)(?:\.(\d+))?(g|kg)$/.exec(amount);
+      if (!match || !/[1-9]/.test(match[1] + (match[2] ?? ''))) throw new Error('Use positive grams/kg or “available” for pantry quantities.');
+      const digits = match[1] + (match[2] ?? '');
+      const scale = (match[2]?.length ?? 0) - (match[3] === 'kg' ? 3 : 0);
+      const padded = scale > 0 ? digits.padStart(scale + 1, '0') : digits + '0'.repeat(-scale);
+      const grams = scale > 0 ? padded.slice(0, -scale) + '.' + padded.slice(-scale) : padded;
+      items[ingredient] = {grams: grams.replace(/^0+(?=\d)/, ''), use_first: useFirst.includes(ingredient)};
+    }
+  }
+  return items;
 }
 
 export function recipePayload(form, capabilities, pantryRows) {
   const pantry = {};
-  for (const {ingredient, quantity} of pantryRows) {
+  for (const {ingredient, quantity: rawQuantity} of pantryRows) {
+    const quantity = decimal(rawQuantity);
     if (!ingredient && !quantity) continue;
     if (!capabilities.ingredients.includes(ingredient)) throw new Error('Choose a known pantry ingredient.');
     if (Object.hasOwn(pantry, ingredient)) throw new Error('Each pantry ingredient may appear only once.');
@@ -84,7 +128,12 @@ export function recipePayload(form, capabilities, pantryRows) {
     if (form.use_first.some(id => !Object.hasOwn(pantry, id))) throw new Error('Use-first ingredients must be in your pantry.');
     payload.use_first = form.use_first;
   }
-  if (form.seasonings_available === true) payload.seasonings_available = true;
+  if (typeof form.seasonings_available === 'boolean') payload.seasonings_available = form.seasonings_available;
+  if (typeof form.oil_available === 'boolean' && capabilities.recipe_request_schema?.properties?.oil_available) payload.oil_available = form.oil_available;
+  if (form.language !== undefined) {
+    if (!['cs', 'en'].includes(form.language)) throw new Error('Choose Czech or English.');
+    payload.language = form.language;
+  }
   if (form.profile_fingerprint) {
     if (payload.source_ids.length !== 1 || payload.profile_fingerprints) throw new Error('Use per-source profiles for combined requests.');
     if (!/^(?:legacy|[0-9a-f]{24})$/.test(form.profile_fingerprint)) throw new Error('Choose a published grocery profile.');

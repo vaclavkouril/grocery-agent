@@ -25,6 +25,11 @@ and independently configured API/worker processes. The backend also serves a sep
 typed Python clients use the same API. Optional [email and SimpleX clients](docs/channels.md)
 support verified bindings and confirmed commands; both remain disabled by default.
 
+The website supports Czech and English, separate recipe-language preferences, explicitly saved
+pantry stock and reusable presets. Upgrade the control database with
+`.venv/bin/grocery-agent db upgrade control` before starting the updated API/worker;
+see [account state and revision-safe updates](docs/backend.md#account-preferences-pantry-and-presets).
+
 ## Install
 
 Run from the repository root:
@@ -91,6 +96,8 @@ preserved provenance and distinct shopping-context limits. See [recipe configura
 usage](docs/recipe-service.md).
 Measured local-model recipe quality, speed, memory, and reproduction commands are in the
 [local model benchmark report](docs/local-model-benchmark.md).
+The [second benchmark round](docs/model-benchmark-round-two.md) adds five small local models,
+budget Codex models, measured token usage, and weekly usage estimates.
 
 `grocery-scrape --config config/scrape.toml` collects configured profiles once;
 `grocery-collect --config config/collect.toml --once` uses the independently configured collector.

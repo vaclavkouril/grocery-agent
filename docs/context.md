@@ -38,6 +38,8 @@ production migrations or live model/retailer acceptance runs were activated by t
   Administrator source/profile refreshes are coalesced and cooldown-limited without exposing other users.
 - [Website](website.md): capability-driven pantry/recipe forms, offers, progress/history/private reports,
   invitation/password/token login and optional cookie resume. Shared synchronous/asynchronous HTTP client.
+  Czech/English interface and independently selected recipe language; revision-safe saved pantry,
+  preferences and presets. Recipes never deduct stock, and UI language switches never regenerate reports.
 - [Channels](channels.md), [email](email.md), [SimpleX](simplex.md): separately configured transports,
   proof-of-control binding, command confirmation, deduplicated intake and leased outbox retries.
 - [Configuration](configuration.md): defaults → shared TOML → app TOML → environment → explicit options.
@@ -45,7 +47,7 @@ production migrations or live model/retailer acceptance runs were activated by t
 
 ## Storage and compatibility
 
-Migration heads: offers `offers_0003`, control `control_0004`. Old collections retain legacy unknown
+Migration heads: offers `offers_0003`, control `control_0005`. Old collections retain legacy unknown
 coverage, not guessed profiles. Control migrations preserve users, sessions, jobs and channel state.
 Startup requires current schemas; migrations are explicit. Back up both DBs and evidence/report files.
 Old commands/catalogue endpoints/template recipes remain compatible. Library code never imports apps.
@@ -59,9 +61,10 @@ are not guaranteed checkout quantities, and recipe costs are consumed-ingredient
 Exact GTIN matching is supported; fuzzy identity and checkout ordering are outside this task.
 
 Run offline pytest, Ruff, mypy and `npm test --prefix src/frontend`; browser fixtures require Chromium.
-Final integration: 1,013 offline/browser tests passed; Node, Ruff and mypy (126 files)
-passed. Built-wheel defaults/assets/migrations/entrypoints were verified from an unrelated CWD.
-This sandbox needs approved pytest escalation for asyncio wake-up sockets.
+Current bilingual integration: 1,103 offline Python tests, 13 fixture-browser tests and 58 Node
+tests passed. Ruff lint/format and mypy (132 source files) passed. The built wheel was checked for
+byte-identical frontend assets, bilingual defaults and the account migration. Existing portability
+tests exercise application configuration from an unrelated CWD.
 Docker is installed but local Compose execution is unverified (Compose plugin unavailable).
 Real Codex and local Ollama structured drafts passed after schema compatibility/ID fixes.
 Live account setup and remaining Docker prerequisites are tracked in [acceptance](acceptance.md).

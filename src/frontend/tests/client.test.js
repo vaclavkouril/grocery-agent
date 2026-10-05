@@ -4,7 +4,10 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {runInNewContext} from 'node:vm';
 import {randomUUID} from 'node:crypto';
-import {ApiError, GroceryClient, recipePayload} from '../assets/client.js';
+import {ApiError, GroceryClient, recipePayload, decimal} from '../assets/client.js';
+import {language, dictionaries, t, errorMessage, staticTranslations, displayDecimal, sourceKey} from '../assets/i18n.js';
+import {AccountUI, fieldLabels} from '../assets/account.js';
+import {clearValidation, showValidation} from '../assets/validation.js';
 
 const capabilities = {providers: ['template'], cache_policies: ['cache-only'], ingredients: ['rice', 'oil'], sources: ['kupi']};
 const form = {provider: 'template', model: '', cache_policy: 'cache-only', meal_style: 'main', servings: '2', max_stores: '1', budget: '12.3400', exclusions: []};
@@ -76,15 +79,16 @@ async function browserApp(auth = {registration: true, password_login: true}, reg
   ids.push('auth-tabs', 'auth-login-tab', 'auth-register-tab', 'signin-heading', 'signin-description', 'register-form', 'register-username', 'register-password', 'register-password-confirm', 'register-error');
   const elements = new Map();
   const document = {
+    documentElement: {lang: 'en', childNodes: [], getAttribute() { return null; }},
     activeElement: null,
     getElementById: id => elements.get(id),
     createElement: tag => element(tag),
-    querySelectorAll: () => [...elements.values()].filter(item => /password|username|token|auth-.*tab/.test(item.id)),
+    querySelectorAll: selector => [...elements.values()].filter(item => selector === '[data-i18n]' ? item.dataset.i18n : /password|username|token|auth-.*tab/.test(item.id)),
   };
   function element(id) {
     const listeners = {}, attributes = {};
     return {
-      id, value: '', hidden: false, disabled: false, children: [], textContent: '', dataset: {},
+      id, tagName: id.toUpperCase(), value: '', hidden: false, disabled: false, children: [], textContent: '', dataset: {},
       addEventListener(type, handler) { listeners[type] = handler; },
       dispatch(type, properties = {}) { listeners[type]?.({currentTarget: this, preventDefault() {}, ...properties}); },
       setAttribute(name, value) { attributes[name] = value; },
@@ -93,13 +97,23 @@ async function browserApp(auth = {registration: true, password_login: true}, reg
       replaceChildren(...children) { this.children = children; if (children[0]?.value !== undefined) this.value = children[0].value; },
       append(...children) { this.children.push(...children); },
       after(item) { this.following = item; },
-      closest() { return null; }, reset() {}, querySelectorAll() { return []; },
+      closest() { return null; }, reset() {}, querySelectorAll() { return []; }, remove() {},
       focus() { document.activeElement = this; },
       get selectedOptions() { return this.children.filter(child => child.value === this.value); },
       get childNodes() { return this.children; },
       querySelector(selector) {
-        if (selector === 'select') return this.children[0]?.children[0];
-        if (selector === 'input') return this.children[1]?.children[0];
+        if (selector === 'select' || selector === 'input') {
+          const tagName = selector.toUpperCase();
+          const find = children => {
+            for (const child of children) {
+              if (child.tagName === tagName) return child;
+              const descendant = find(child.children ?? []);
+              if (descendant) return descendant;
+            }
+            return null;
+          };
+          return find(this.children);
+        }
         return this.submitButton ?? null;
       },
     };
@@ -124,8 +138,10 @@ async function browserApp(auth = {registration: true, password_login: true}, reg
   let client;
   class BrowserClient extends GroceryClient { constructor() { super(fetcher); client = this; } }
   const storage = new Proxy({}, {get() { throw new Error('Identity must never access browser storage'); }, set() { throw new Error('Identity must never persist in browser storage'); }});
-  runInNewContext(source.replace(/^import .*;$/m, ''), {
-    GroceryClient: BrowserClient, ApiError, recipePayload, document,
+  language.current = 'en'; language.explicit = null; language.browser = 'en';
+  runInNewContext(source.replace(/^import .*;$/gm, ''), {
+    GroceryClient: BrowserClient, ApiError, recipePayload, decimal, language, dictionaries, t, errorMessage, staticTranslations, displayDecimal, sourceKey, AccountUI, fieldLabels, clearValidation, showValidation,
+    choiceList: () => ({render() {}, destroy() {}}), retailerChoices: () => ({render() {}, destroy() {}}), document, Event,
     window: {addEventListener(type, handler) { windowListeners[type] = handler; }},
     localStorage: storage, sessionStorage: storage, clearTimeout, setTimeout, crypto: {randomUUID},
   });
