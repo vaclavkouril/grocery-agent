@@ -20,6 +20,7 @@ NutritionLimit = Annotated[ExactDecimal, Field(ge=0, max_digits=16, decimal_plac
 
 class RecipeRequest(DomainModel):
     request_id: UUID = Field(default_factory=uuid4)
+    language: Literal["cs", "en"] = "en"
     servings: int = Field(default=2, ge=1, le=20)
     meal_style: str = "main"
     pantry: dict[str, str] = Field(default_factory=dict)
@@ -133,6 +134,10 @@ def recipe_prompt(request: RecipeRequest, context: str) -> str:
             "task": "Write a recipe using only known ingredient IDs in context. "
             "Quantities are decimal strings of total raw grams for all requested servings. "
             "Return only a recipe draft; prices and nutrition are computed later.",
+            "language": request.language,
+            "instructions": "Write the title and all steps in "
+            + ("Czech" if request.language == "cs" else "English")
+            + ". Keep canonical ingredient IDs unchanged.",
             "request": request.model_dump(mode="json"),
             "context": context,
         }
@@ -161,9 +166,9 @@ class RecipeProvider(Protocol):
 class TemplateProvider:
     def generate(self, request: RecipeRequest, context: str) -> dict[str, Any]:
         return {
-            "title": "Jednoduchá pánev",
+            "title": "Jednoduchá pánev" if request.language == "cs" else "Simple skillet",
             "ingredients": [{"ingredient": "zelenina", "quantity": 300}],
-            "steps": ["Promíchejte a podávejte."],
+            "steps": ["Promíchejte a podávejte." if request.language == "cs" else "Mix and serve."],
             "minutes": 15,
         }
 

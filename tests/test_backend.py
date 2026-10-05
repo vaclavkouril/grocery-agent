@@ -191,7 +191,7 @@ def test_legacy_control_migration_preserves_users_and_profiles(tmp_path: Path) -
                 name: connection.execute(select(table)).mappings().all()
                 for name, table in baseline.tables.items()
             }
-        assert upgrade_database(engine, "control") == "control_0004"
+        assert upgrade_database(engine, "control") == "control_0005"
         with engine.connect() as connection:
             after = {
                 name: connection.execute(select(table)).mappings().all()

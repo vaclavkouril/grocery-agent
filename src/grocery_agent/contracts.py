@@ -1,6 +1,6 @@
 """Transport contracts shared by HTTP clients and backend OpenAPI responses."""
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import AwareDatetime, Field
 
@@ -31,6 +31,13 @@ class JobPage(DomainModel):
     limit: int
 
 
+class ProfileMetadata(DomainModel):
+    name: str
+    fingerprint: str
+    scope: str | None = None
+    coverage: Literal["complete", "partial"] = "complete"
+
+
 class Capabilities(DomainModel):
     providers: tuple[str, ...]
     default_provider: str | None = None
@@ -44,6 +51,12 @@ class Capabilities(DomainModel):
     location_label: str | None = None
     ingredients: tuple[str, ...]
     ingredient_labels: dict[str, str] = Field(default_factory=dict)
+    ingredient_localized_labels: dict[str, dict[str, str]] = Field(default_factory=dict)
+    languages: tuple[Literal["cs", "en"], ...] = ("cs", "en")
+    defaults: dict[str, Any] = Field(default_factory=dict)
+    retailer_ids: tuple[str, ...] = ()
+    profile_metadata: dict[str, tuple[ProfileMetadata, ...]] = Field(default_factory=dict)
+    read_only_policy: dict[str, Any] = Field(default_factory=dict)
     meal_styles: tuple[str, ...]
     refresh_allowed: bool
     refresh_profiles: dict[str, tuple[str, ...]] = Field(default_factory=dict)

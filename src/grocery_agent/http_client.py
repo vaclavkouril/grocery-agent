@@ -7,6 +7,17 @@ from urllib.parse import quote
 
 import httpx
 
+from grocery_agent.account_models import (
+    PantryPut,
+    PantryView,
+    PresetCreate,
+    PresetPage,
+    PresetUpdate,
+    PresetView,
+    RevisionInput,
+    SettingsPatch,
+    SettingsView,
+)
 from grocery_agent.catalogue.models import CataloguePage, CatalogueQuery
 from grocery_agent.contracts import Capabilities, JobPage, JobView, Principal
 from grocery_agent.models.offer import Offer
@@ -219,6 +230,61 @@ class GroceryClient:
     def me(self) -> Principal:
         return Principal.model_validate(decode(self.http.get("/v1/me")))
 
+    def settings(self) -> SettingsView:
+        return SettingsView.model_validate(decode(self.http.get("/v1/me/settings")))
+
+    def patch_settings(self, payload: SettingsPatch) -> SettingsView:
+        return SettingsView.model_validate(
+            decode(
+                self.http.patch(
+                    "/v1/me/settings", json=payload.model_dump(mode="json", exclude_unset=True)
+                )
+            )
+        )
+
+    def pantry(self) -> PantryView:
+        return PantryView.model_validate(decode(self.http.get("/v1/me/pantry")))
+
+    def put_pantry(self, payload: PantryPut) -> PantryView:
+        return PantryView.model_validate(
+            decode(self.http.put("/v1/me/pantry", json=payload.model_dump(mode="json")))
+        )
+
+    def presets(self) -> PresetPage:
+        return PresetPage.model_validate(decode(self.http.get("/v1/me/presets")))
+
+    def preset(self, preset_id: str) -> PresetView:
+        return PresetView.model_validate(
+            decode(self.http.get(f"/v1/me/presets/{quote(preset_id, safe='')}"))
+        )
+
+    def create_preset(self, payload: PresetCreate) -> PresetView:
+        return PresetView.model_validate(
+            decode(self.http.post("/v1/me/presets", json=payload.model_dump(mode="json")))
+        )
+
+    def update_preset(self, preset_id: str, payload: PresetUpdate) -> PresetView:
+        return PresetView.model_validate(
+            decode(
+                self.http.patch(
+                    f"/v1/me/presets/{quote(preset_id, safe='')}",
+                    json=payload.model_dump(mode="json", exclude_unset=True),
+                )
+            )
+        )
+
+    def delete_preset(self, preset_id: str, *, expected_revision: int) -> None:
+        payload = RevisionInput(expected_revision=expected_revision)
+        decode(
+            self.http.delete(
+                f"/v1/me/presets/{quote(preset_id, safe='')}",
+                params=payload.model_dump(mode="json"),
+            )
+        )
+
+    def job_request(self, job_id: str) -> RecipeRequest:
+        return RecipeRequest.model_validate(decode(self.http.get(job_path(job_id, "/request"))))
+
     def collections(self, source_id: str | None = None) -> list[dict[str, Any]]:
         value = decode(
             self.http.get("/v1/collections", params={"source": source_id} if source_id else {})
@@ -357,6 +423,63 @@ class AsyncGroceryClient:
 
     async def me(self) -> Principal:
         return Principal.model_validate(decode(await self.http.get("/v1/me")))
+
+    async def settings(self) -> SettingsView:
+        return SettingsView.model_validate(decode(await self.http.get("/v1/me/settings")))
+
+    async def patch_settings(self, payload: SettingsPatch) -> SettingsView:
+        return SettingsView.model_validate(
+            decode(
+                await self.http.patch(
+                    "/v1/me/settings", json=payload.model_dump(mode="json", exclude_unset=True)
+                )
+            )
+        )
+
+    async def pantry(self) -> PantryView:
+        return PantryView.model_validate(decode(await self.http.get("/v1/me/pantry")))
+
+    async def put_pantry(self, payload: PantryPut) -> PantryView:
+        return PantryView.model_validate(
+            decode(await self.http.put("/v1/me/pantry", json=payload.model_dump(mode="json")))
+        )
+
+    async def presets(self) -> PresetPage:
+        return PresetPage.model_validate(decode(await self.http.get("/v1/me/presets")))
+
+    async def preset(self, preset_id: str) -> PresetView:
+        return PresetView.model_validate(
+            decode(await self.http.get(f"/v1/me/presets/{quote(preset_id, safe='')}"))
+        )
+
+    async def create_preset(self, payload: PresetCreate) -> PresetView:
+        return PresetView.model_validate(
+            decode(await self.http.post("/v1/me/presets", json=payload.model_dump(mode="json")))
+        )
+
+    async def update_preset(self, preset_id: str, payload: PresetUpdate) -> PresetView:
+        return PresetView.model_validate(
+            decode(
+                await self.http.patch(
+                    f"/v1/me/presets/{quote(preset_id, safe='')}",
+                    json=payload.model_dump(mode="json", exclude_unset=True),
+                )
+            )
+        )
+
+    async def delete_preset(self, preset_id: str, *, expected_revision: int) -> None:
+        payload = RevisionInput(expected_revision=expected_revision)
+        decode(
+            await self.http.delete(
+                f"/v1/me/presets/{quote(preset_id, safe='')}",
+                params=payload.model_dump(mode="json"),
+            )
+        )
+
+    async def job_request(self, job_id: str) -> RecipeRequest:
+        return RecipeRequest.model_validate(
+            decode(await self.http.get(job_path(job_id, "/request")))
+        )
 
     async def collections(self, source_id: str | None = None) -> list[dict[str, Any]]:
         value = decode(

@@ -11,6 +11,10 @@ scrape/collect apps; see [acquisition profiles](acquisition-profiles.md). `recip
 `recipe_service.py` share local-cache-first orchestration and combined-source execution between CLI
 and backend. The backend recipe executor import is a compatibility adapter. Optional password
 and cookie/CSRF sessions, durable auth throttles and source/profile refresh gates use `control_0004`.
+`control_0005` adds revision-controlled account language preferences and pantry stock. Owned recipe
+presets reuse existing profiles; stock, priorities and request IDs are excluded from presets.
+Account changes are explicit and recipes never mutate inventory. `account_models.py` shares these
+wire contracts, and `backend/user_state.py` enforces ownership and serialized revision checks.
 Shared TOML layering and portable bundled defaults are described in [configuration](configuration.md).
 See [recipe execution and compatible scopes](recipe-service.md).
 
@@ -19,6 +23,10 @@ It has no build-time dependency or library imports and is packaged as optional b
 `contracts.py` shares response types; `http_client.py` supplies synchronous/asynchronous Python
 clients. `apps/recipes.py --api-url` delegates through that client; browser recipe choices come
 from advertised schemas rather than duplicating server configuration. See [website](website.md).
+Local frontend dictionaries translate Czech/English controls and diagnostics. Recipe language is
+independent of UI language and pinned with the prompt version. `localization.py` supplies server-side
+report/channel text; configured ingredient and fixed-recipe translations retain canonical IDs.
+Neither a language switch nor a new catalogue publication changes historical reports.
 
 `channels/email.py` and `channels/simplex.py` own transport-specific identity/MIME/WebSocket
 handling; `apps/email.py` and `apps/simplex.py` own independent startup/configuration. Shared

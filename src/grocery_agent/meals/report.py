@@ -1,10 +1,19 @@
 import html
+import json
 import os
 import tempfile
-from datetime import timedelta
+from datetime import datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from grocery_agent.localization import (
+    Language,
+    format_date,
+    format_decimal,
+    localized_notice,
+    translate,
+)
 from grocery_agent.meals.catalog import MealCatalog
 from grocery_agent.meals.planner import MealReport
 
@@ -18,6 +27,18 @@ table{width:100%;border-collapse:collapse}
 td,th{text-align:left;padding:10px;border-bottom:1px solid #ddd}
 a{color:#176449}small,.note{color:#526258}.warning{background:#ffe3c0;padding:14px;border-radius:10px}
 .scroll{overflow-x:auto}li{margin:10px 0}details{margin:14px 0}
+@media print{
+@page{margin:15mm}
+body{background:white;color:black;font-size:11pt}
+main{max-width:none;padding:0}h1{font-size:24pt}
+article{padding:12px;margin:16px 0;border-radius:0}
+.stat,.warning{background:transparent;border:1px solid #999}
+.scroll{overflow:visible}table{font-size:9pt}td,th{padding:5px;overflow-wrap:anywhere}
+h2,h3,summary{break-after:avoid}tr,li,.stats{break-inside:avoid}
+thead{display:table-header-group}a{color:black}
+details::details-content{content-visibility:visible}
+details>:not(summary){display:block!important}
+}
 """
 
 
@@ -40,16 +61,45 @@ def atomic_write(path: Path, content: str) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def render_html(report: MealReport, catalog: MealCatalog) -> str:
+def render_html(report: MealReport, catalog: MealCatalog, language: Language = "en") -> str:
     esc = html.escape
+
+    def t(message: str, **values: object) -> str:
+        return esc(translate(message, language, **values))
+
+    def d(value: Decimal, spec: str = "g") -> str:
+        return format_decimal(value, language, spec)
+
+    def timestamp(value: datetime) -> str:
+        return format_date(
+            value.astimezone(ZoneInfo(catalog.policy.timezone)) if language == "cs" else value,
+            language,
+        )
+
     cache_warnings = "".join(
-        f'<p class="warning">{esc(message)}</p>' for message in report.warnings
+        f'<p class="warning">{esc(localized_notice(message, language))}</p>'
+        for message in report.warnings
     )
     policy = report.policy
     local_date = report.generated_at.astimezone(ZoneInfo(policy.timezone)).date().isoformat()
+    display_date = format_date(
+        report.generated_at.astimezone(ZoneInfo(policy.timezone)).date(), language
+    )
     expiry = report.batch_finished_at + timedelta(hours=policy.max_age_hours)
     cards: list[str] = []
     for meal in report.meals:
+        template = next(
+            (
+                recipe
+                for recipe in catalog.recipes
+                if recipe.title == meal.title and recipe.steps == meal.steps
+            ),
+            None,
+        )
+        title = template.titles.get(language, meal.title) if template else meal.title
+        translated_steps = (
+            template.translated_steps.get(language, meal.steps) if template else meal.steps
+        )
         n = meal.nutrients_per_serving
         rows: list[str] = []
         sources: list[str] = []
@@ -60,109 +110,172 @@ def render_html(report: MealReport, catalog: MealCatalog) -> str:
             product = (
                 f'<a href="{esc(str(offer.source_url))}">{esc(offer.product.name)}</a>'
                 if offer
-                else esc(price.label)
+                else esc(catalog.ingredients[price.ingredient_id].localized_label(language))
             )
             store = (
                 esc(offer.product.store_id)
                 if offer
-                else ("Already owned" if line.purchased_grams == 0 else "Pantry estimate")
+                else t("Already owned" if line.purchased_grams == 0 else "Pantry estimate")
             )
             rows.append(
-                f"<tr><td>{product}</td><td>{line.required_grams:g} g</td>"
-                f"<td>{line.owned_grams:g} g</td><td>{line.purchased_grams:g} g</td>"
+                f"<tr><td>{product}</td><td>{d(line.required_grams)} g</td>"
+                f"<td>{d(line.owned_grams)} g</td><td>{d(line.purchased_grams)} g</td>"
                 f"<td>{store}</td>"
-                f"<td>{price.price_per_kg_czk:.2f} Kč/kg</td>"
-                f"<td>{line.usage_cost_czk:.2f} Kč</td></tr>"
+                f"<td>{d(price.price_per_kg_czk, '.2f')} Kč/kg</td>"
+                f"<td>{d(line.usage_cost_czk, '.2f')} Kč</td></tr>"
             )
             ingredient = catalog.ingredients[price.ingredient_id]
             sources.append(
-                f'<li>{esc(ingredient.label)}: <a href="{esc(str(ingredient.nutrition_source))}">'
-                f"nutrition source</a>; edible yield {ingredient.edible_fraction * 100:g}%</li>"
+                f"<li>{esc(ingredient.localized_label(language))}: "
+                f'<a href="{esc(str(ingredient.nutrition_source))}">'
+                f"{t('nutrition source')}</a>; {t('edible yield')} "
+                f"{d(ingredient.edible_fraction * 100)}%</li>"
             )
             if offer:
+                source = esc(price.source_id) if price.source_id else t("unspecified")
                 provenance = (
-                    f"source: {esc(price.source_id or 'unspecified')}; "
-                    f"run: {esc(price.run_id or 'unspecified')}; "
-                    f"shopping context: {esc(price.shopping_context)}; "
+                    f"{t('source')}: {source}; "
+                    f"{t('run')}: {esc(price.run_id) if price.run_id else t('unspecified')}; "
+                    f"{t('shopping context')}: {esc(price.shopping_context)}; "
                 )
                 promotion = offer.promotion
-                dates = f"{offer.valid_from or 'start not specified'} → "
-                dates += str(offer.valid_until or "end not specified")
+                dates = (
+                    format_date(offer.valid_from, language)
+                    if offer.valid_from
+                    else translate("start not specified", language)
+                ) + " → "
+                dates += (
+                    format_date(offer.valid_until, language)
+                    if offer.valid_until
+                    else translate("end not specified", language)
+                )
+                conditions = (
+                    (esc(promotion.conditions) if promotion.conditions else t("no terms reported"))
+                    if promotion
+                    else ""
+                )
+                observed = timestamp(price.observed_at) if price.observed_at else t("unspecified")
                 terms.append(
                     f"<li>{esc(offer.product.name)} — {esc(dates)}; "
                     f"{provenance}"
-                    f"{esc(promotion.conditions or 'no terms reported') if promotion else ''}; "
-                    f"stock: {esc(offer.availability.value)}; observed {price.observed_at}</li>"
+                    f"{conditions}; "
+                    f"{t('stock')}: {t(offer.availability.value)}; "
+                    f"{t('observed')} {observed}</li>"
                 )
-        steps = "".join(f"<li>{esc(step)}</li>" for step in meal.steps)
+        steps = "".join(f"<li>{esc(step)}</li>" for step in translated_steps)
         seasoning_note = (
-            "Seasonings already available: 0.00 Kč."
+            t("Seasonings already available: 0.00 Kč.")
             if report.pantry.seasonings_available
             else (
-                f"Plus {policy.seasoning_allowance_czk:.2f} Kč pantry seasoning "
-                "allowance per serving."
+                t(
+                    "Plus {cost} Kč pantry seasoning allowance per serving.",
+                    cost=d(policy.seasoning_allowance_czk, ".2f"),
+                )
             )
         )
-        priority_note = (
-            f"<p>Uses {meal.use_first_grams:g} g of ingredients marked use first.</p>"
-            if meal.use_first_grams
-            else ""
-        )
+        priority_note = ""
+        if meal.use_first_grams:
+            priority_note = (
+                "<p>"
+                + t(
+                    "Uses {grams} g of ingredients marked use first.",
+                    grams=d(meal.use_first_grams),
+                )
+                + "</p>"
+            )
         cards.append(
-            f"<article><h2>{esc(meal.title)}</h2><p>{meal.minutes} minutes · "
-            f"{meal.servings} serving(s) · "
-            f"{esc(', '.join(meal.stores) or 'No store trip needed')}</p>"
-            f'<div class="stats"><span class="stat"><b>{n.protein_g:.0f} g</b> protein</span>'
-            f'<span class="stat">{n.kcal:.0f} kcal</span>'
-            f'<span class="stat">{n.carbs_g:.0f} g carbs · {n.fat_g:.0f} g fat</span>'
-            f'<span class="stat">≈ {meal.usage_cost_per_serving_czk:.2f} Kč / serving</span></div>'
+            f"<article><h2>{esc(title)}</h2><p>{meal.minutes} {t('minutes')} · "
+            f"{meal.servings} {t('serving(s)')} · "
+            f"{esc(', '.join(meal.stores)) if meal.stores else t('No store trip needed')}</p>"
+            '<div class="stats"><span class="stat">'
+            f"<b>{d(n.protein_g, '.0f')} g</b> {t('protein')}</span>"
+            f'<span class="stat">{d(n.kcal, ".0f")} kcal</span>'
+            f'<span class="stat">{d(n.carbs_g, ".0f")} g {t("carbs")} · '
+            f"{d(n.fat_g, '.0f')} g {t('fat')}</span>"
+            f'<span class="stat">≈ {d(meal.usage_cost_per_serving_czk, ".2f")} Kč '
+            f"/ {t('serving')}</span></div>"
             f"{priority_note}"
-            '<div class="scroll"><table><thead><tr><th>Ingredient</th><th>Use</th>'
-            "<th>Already have</th><th>Buy</th>"
-            "<th>Retailer</th><th>Quote</th><th>Used cost</th></tr></thead><tbody>"
+            '<div class="scroll"><table><thead><tr>'
+            + "".join(
+                f"<th>{t(label)}</th>"
+                for label in (
+                    "Ingredient",
+                    "Use",
+                    "Already have",
+                    "Buy",
+                    "Retailer",
+                    "Quote",
+                    "Used cost",
+                )
+            )
+            + "</tr></thead><tbody>"
             + "".join(rows)
             + "</tbody></table></div>"
-            f"<p class='note'>{seasoning_note} Table quantities cover all servings; "
-            "macros and headline cost "
-            "are per serving. Weigh rice/lentils dry and meat raw; vegetables before trimming.</p>"
-            f"<h3>Cook it</h3><ol>{steps}</ol><details><summary>Offer terms and nutrition sources"
+            f"<p class='note'>{seasoning_note} "
+            + t(
+                "Table quantities cover all servings; macros and headline cost are per serving. "
+                "Weigh rice/lentils dry and meat raw; vegetables before trimming."
+            )
+            + "</p>"
+            f"<h3>{t('Cook it')}</h3><ol>{steps}</ol><details><summary>"
+            f"{t('Offer terms and nutrition sources')}"
             f"</summary><ul>{''.join(terms)}</ul><ul>{''.join(sources)}</ul></details></article>"
         )
     priority_label = (
-        "use-first stock, then "
+        t("use-first stock, then ")
         if any(item.use_first for item in report.pantry.items.values())
         else ""
     )
+    advertised_prices = t("Today's advertised prices.")
     return (
-        '<!doctype html><html lang="en"><meta charset="utf-8">'
+        f'<!doctype html><html lang="{language}"><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f"<title>Protein meals · {esc(policy.location_label)}</title><style>{STYLE}</style><main>"
-        f"<p>GROCERY AGENT · {esc(policy.location_label)} · {local_date}</p>"
-        "<h1>Good food. More protein.<br>Today's advertised prices.</h1>"
-        f"<p>Meal style: {esc(policy.meal_style)} · "
-        f"minimum {policy.min_protein_g:g} g protein / serving · "
-        f"maximum {policy.max_kcal:g} kcal / serving</p>"
-        f"<p>Lactose-free: {policy.lactose_free} · loyalty prices: {policy.allow_loyalty} · "
-        f"ranked by {priority_label}"
-        f"{esc(policy.ranking.replace('_', ' '))}</p>"
+        f"<title>{t('Protein meals')} · {esc(policy.location_label)}</title>"
+        f"<style>{STYLE}</style><main>"
+        f"<p>GROCERY AGENT · {esc(policy.location_label)} · "
+        f"{display_date}</p>"
+        f"<h1>{t('Good food. More protein.')}<br>{advertised_prices}</h1>"
+        f"<p>{t('Meal style')}: {t(policy.meal_style)} · "
+        f"{t('minimum')} {d(policy.min_protein_g)} g {t('protein')} / {t('serving')} · "
+        f"{t('maximum')} {d(policy.max_kcal)} kcal / {t('serving')}</p>"
+        f"<p>{t('Lactose-free')}: {t(str(policy.lactose_free))} · "
+        f"{t('loyalty prices')}: {t(str(policy.allow_loyalty))} · "
+        f"{t('ranked by')} {priority_label}"
+        f"{t(policy.ranking.replace('_', ' '))}</p>"
         f"{cache_warnings}"
-        '<p class="warning" id="freshness">For the report date only. Check offer dates and outlet '
-        "terms before shopping. Availability is not guaranteed.</p>"
-        "<p class='note'>Costs estimate usage, not a checkout total. Whole packs may cost "
-        "more; unknown pack sizes and travel are not priced. Already-owned quantities cost zero; "
-        "oil and spices use estimates unless marked available. Each dish is an alternative using "
-        "the same stock, not a combined shopping plan. Stock is not deducted automatically; "
-        "update it after cooking. Macros use generic ingredient data, trimming yields, "
-        "and include oil; optional "
-        "seasonings are excluded. Select plain ingredients and check labels for lactose.</p>"
+        '<p class="warning" id="freshness">'
+        + t(
+            "For the report date only. Check offer dates and outlet terms before shopping. "
+            "Availability is not guaranteed."
+        )
+        + "</p>"
+        "<p class='note'>"
+        + t(
+            "Costs estimate usage, not a checkout total. Whole packs may cost "
+            "more; unknown pack sizes and travel are not priced. "
+            "Already-owned quantities cost zero; oil and spices use estimates unless marked "
+            "available. Each dish is an alternative using "
+            "the same stock, not a combined shopping plan. Stock is not deducted automatically; "
+            "update it after cooking. Macros use generic ingredient data, trimming yields, "
+            "and include oil; optional "
+            "seasonings are excluded. Select plain ingredients and check labels for lactose."
+        )
+        + "</p>"
         + "".join(cards)
-        + f"<footer>Generated {report.generated_at.isoformat()} · batch "
-        f"{report.batch_finished_at.isoformat()} · run {esc(report.run_id)}</footer></main>"
+        + f"<footer>{t('Generated')} {timestamp(report.generated_at)} · {t('batch')} "
+        f"{timestamp(report.batch_finished_at)} · {t('run')} {esc(report.run_id)}</footer></main>"
         f"<script>const day=new Intl.DateTimeFormat('en-CA',{{timeZone:'{esc(policy.timezone)}',"
         "year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());"
         f"if(day!=='{local_date}'||Date.now()>Date.parse('{expiry.isoformat()}'))"
         "document.getElementById('freshness').textContent="
-        "'This report is out of date. Run grocery-agent meals to generate current suggestions.';"
+        + json.dumps(
+            translate(
+                "This report is out of date. Run grocery-agent meals "
+                "to generate current suggestions.",
+                language,
+            )
+        )
+        + ";"
         "</script></html>"
     )
 

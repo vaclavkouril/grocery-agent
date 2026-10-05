@@ -337,6 +337,15 @@ class SQLAlchemyCatalogueRepository:
             latest_run_status=latest.status,
             degraded=degraded,
             warnings=warnings,
+            warning_codes=tuple(
+                code
+                for condition, code in (
+                    (degraded, "refresh-degraded"),
+                    (not coverage.complete, "coverage-unknown"),
+                    (fingerprint == "legacy", "legacy-coverage"),
+                )
+                if condition
+            ),
             profile_fingerprint=fingerprint,
             coverage_complete=coverage.complete,
             actual_scope=coverage.actual_scope,

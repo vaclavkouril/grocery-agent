@@ -24,7 +24,7 @@ recipe [key=value ...] (meal and meals are aliases)
 
 Recipe parameters: provider, model, source, profile (or profile_fingerprint),
 profiles (comma-separated SOURCE:FINGERPRINT),
-cache_policy, servings, meal_style
+cache_policy, servings, language (cs/en), meal_style
 (or style), have, budget, max_stores, exclude (or exclusions),
 retailer (or retailer_ids), allow_loyalty, min_protein (or min_protein_g),
 max_kcal, max_minutes, use_first, have_seasonings (or seasonings_available).
@@ -52,6 +52,7 @@ class ChannelAction(DomainModel):
 
 
 _FIELDS = {
+    "language": "language",
     "provider": "provider",
     "model": "model",
     "source": "source_ids",
@@ -82,7 +83,9 @@ _FIELDS = {
 }
 
 
-def parse_channel_command(text: str, capabilities: Capabilities) -> RecipeRequest | ChannelAction:
+def parse_channel_command(
+    text: str, capabilities: Capabilities, language: Literal["cs", "en"] | None = None
+) -> RecipeRequest | ChannelAction:
     """Parse strict key=value syntax; invalid commands raise ValueError.
 
     RecipeRequest performs final field validation. Capability checks further
@@ -132,6 +135,8 @@ def parse_channel_command(text: str, capabilities: Capabilities) -> RecipeReques
         "source_ids": (capabilities.sources[0],),
         "cache_policy": capabilities.default_cache_policy,
     }
+    if language is not None:
+        values["language"] = language
     for field, value in supplied.items():
         if field in {"servings", "max_stores", "max_minutes"}:
             if not value.isascii() or not value.isdigit():

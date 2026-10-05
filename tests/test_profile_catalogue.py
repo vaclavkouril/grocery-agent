@@ -171,6 +171,8 @@ def test_legacy_publication_updates_both_legacy_heads(catalogue: CatalogueFixtur
     state = catalogue.cache.state("mock", now)
     assert state.coverage_complete is False
     assert any("coverage" in warning.lower() for warning in state.warnings)
+    assert "coverage-unknown" in state.warning_codes
+    assert "legacy-coverage" in state.warning_codes
 
 
 @pytest.mark.parametrize("status", ["failed", "partial", "empty", "cancelled"])
@@ -191,9 +193,11 @@ def test_failed_refresh_uses_fresh_previous_same_profile(
     state = catalogue.page(p, now).state
     assert state.run_id == previous.run_id and state.degraded
     assert state.latest_run_id == failure.run_id and state.latest_run_status == status
+    assert "refresh-degraded" in state.warning_codes
     assert any(status in warning and previous.run_id in warning for warning in state.warnings)
     unaffected = catalogue.page(other, now).state
     assert unaffected.run_id == other_run.run_id and not unaffected.degraded
+    assert "refresh-degraded" not in unaffected.warning_codes
     assert unaffected.latest_run_id == other_run.run_id
     strict = SQLAlchemyCatalogueRepository(
         catalogue.engine, CatalogueSettings(allow_cached_on_failure=False)

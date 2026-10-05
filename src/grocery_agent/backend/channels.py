@@ -13,8 +13,9 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
-from grocery_agent.channel_commands import HELP_TEXT, ChannelAction, parse_channel_command
+from grocery_agent.channel_commands import ChannelAction, parse_channel_command
 from grocery_agent.contracts import Capabilities
+from grocery_agent.localization import Language, channel_help, translate
 from grocery_agent.persistence.control.schema import (
     ChannelBindingRow,
     ChannelConfirmationRow,
@@ -43,11 +44,27 @@ def normalize_address(channel: str, address: str) -> str:
 
 
 class ChannelRepository:
-    def __init__(self, control: ControlRepository) -> None:
+    def __init__(
+        self,
+        control: ControlRepository,
+        settings_reader: Callable[[str], dict[str, Any]] | None = None,
+    ) -> None:
         self.control = control
         self.sessions = control.sessions
+        if settings_reader is None:
+            from .user_state import UserStateRepository
+
+            settings_reader = UserStateRepository(control).settings
+        self.settings_reader = settings_reader
+
+    def _languages(self, user_id: str) -> tuple[Language, Language]:
+        settings = self.settings_reader(user_id)
+        ui = settings.get("ui_language") or "en"
+        recipe = settings.get("recipe_language") or ui
+        return ("cs" if ui == "cs" else "en", "cs" if recipe == "cs" else "en")
 
     def request_binding(self, user_id: str, channel: str, address: str, now: datetime) -> str:
+        language, _ = self._languages(user_id)
         address = normalize_address(channel, address)
         challenge = secrets.token_urlsafe(32)
         with self.sessions.begin() as session:
@@ -105,7 +122,7 @@ class ChannelRepository:
             self._reply(
                 session,
                 row.id,
-                f"Verify your grocery account: verify {challenge}",
+                translate("Verify your grocery account: verify {token}", language, token=challenge),
                 now,
                 challenge_hash=row.token_hash,
             )
@@ -205,6 +222,7 @@ class ChannelRepository:
             if user is None or not user.enabled:
                 return {"status": "ignored", "reply": None}
             reply: str | None
+            language, recipe_language = self._languages(binding.user_id)
             try:
                 command = parse_channel_command(text, capabilities)
                 if isinstance(command, ChannelAction) and command.action == "verify":
@@ -217,11 +235,13 @@ class ChannelRepository:
                     ):
                         raise AccessDenied("invalid or expired binding challenge")
                     binding.verified = True
-                    reply = "Channel verified. " + HELP_TEXT
+                    reply = translate("Channel verified. ", language) + channel_help(language)
                 elif not binding.verified:
                     # Do not reflect arbitrary input or create an unsolicited reply loop.
                     reply = None
                 elif isinstance(command, RecipeRequest):
+                    if "language" not in command.model_fields_set:
+                        command = command.model_copy(update={"language": recipe_language})
                     command = validate(command)
                     token = secrets.token_urlsafe(32)
                     session.add(
@@ -233,17 +253,24 @@ class ChannelRepository:
                         )
                     )
                     reply = (
-                        "Recipe parameters: "
+                        translate("Recipe parameters: ", language)
                         + command.model_dump_json(exclude={"request_id"})
-                        + f". Reply confirm {token} within 15 minutes."
+                        + translate(
+                            ". Reply confirm {token} within 15 minutes.", language, token=token
+                        )
                     )
                 else:
-                    reply = self._action(session, binding, command, now, max_pending)
+                    reply = self._action(session, binding, command, now, max_pending, language)
             except (ValueError, AccessDenied, Conflict) as exc:
                 # Pydantic exceptions may echo secrets/input: do not send their raw text.
-                reply = "Command rejected; check help, channel verification and server limits."
+                reply = translate(
+                    "Command rejected; check help, channel verification and server limits.",
+                    language,
+                )
                 if isinstance(exc, Conflict):
-                    reply = "Request could not be queued; check pending jobs and try again."
+                    reply = translate(
+                        "Request could not be queued; check pending jobs and try again.", language
+                    )
                 if not binding.verified:
                     reply = None
             response = {"status": "processed", "reply": reply}
@@ -268,9 +295,10 @@ class ChannelRepository:
         command: ChannelAction,
         now: datetime,
         max_pending: int,
+        language: Language = "en",
     ) -> str:
         if command.action == "help":
-            return HELP_TEXT
+            return channel_help(language)
         if command.action == "confirm":
             confirmation = session.scalar(
                 select(ChannelConfirmationRow)
@@ -284,7 +312,9 @@ class ChannelRepository:
                 raise AccessDenied("invalid confirmation")
             if confirmation.consumed_at is not None:
                 if confirmation.job_id:
-                    return f"Already accepted job {confirmation.job_id}."
+                    return translate(
+                        "Already accepted job {job}.", language, job=confirmation.job_id
+                    )
                 raise AccessDenied("invalidated confirmation")
             key = f"channel:{confirmation.token_hash}"
             payload = {
@@ -301,14 +331,22 @@ class ChannelRepository:
                 transaction=session,
             )
             confirmation.consumed_at, confirmation.job_id = now, job.job_id
-            return f"Accepted job {job.job_id}. Use status {job.job_id} to check progress."
+            return translate(
+                "Accepted job {job}. Use status {job} to check progress.", language, job=job.job_id
+            )
         job = session.scalar(
             select(JobRow).where(JobRow.id == command.argument, JobRow.user_id == binding.user_id)
         )
         if job is None:
-            return "Job not found."
+            return translate("Job not found.", language)
         if command.action == "status":
-            return f"Job {job.id}: {job.state}, {job.phase}."
+            return translate(
+                "Job {job}: {state}, {phase}.",
+                language,
+                job=job.id,
+                state=translate(job.state, language),
+                phase=translate(job.phase, language),
+            )
         if command.action == "cancel":
             cancelled = session.scalar(
                 update(JobRow)
@@ -328,8 +366,8 @@ class ChannelRepository:
             )
             if cancelled:
                 self.control._notify(session, cancelled, now)
-                return f"Cancelled job {job.id}."
-            return "Job already finished."
+                return translate("Cancelled job {job}.", language, job=job.id)
+            return translate("Job already finished.", language)
         raise ValueError("unsupported action")
 
     def claim(
@@ -418,13 +456,26 @@ class ChannelRepository:
                     row.state, row.payload = "discarded", None
                     session.flush()
                     continue
-                text = payload.get("text", f"Job {job.id}: {job.state}." if job else "")
+                language, _ = self._languages(binding.user_id)
+                text = payload.get(
+                    "text",
+                    translate(
+                        "Job {job}: {state}.",
+                        language,
+                        job=job.id,
+                        state=translate(job.state, language),
+                    )
+                    if job
+                    else "",
+                )
                 return {
                     "delivery_id": row.id,
                     "lease_token": lease,
                     "address": binding.address,
                     "text": text,
-                    "subject": "Grocery Agent recipe" if job else "Grocery Agent command",
+                    "subject": translate(
+                        "Grocery Agent recipe" if job else "Grocery Agent command", language
+                    ),
                     "report_html": job.report_html if job and job.state == "succeeded" else None,
                     "result": job.result if job and job.state == "succeeded" else None,
                 }

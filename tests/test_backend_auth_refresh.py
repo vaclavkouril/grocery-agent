@@ -348,6 +348,10 @@ def test_refresh_api_configured_effective_profile_selection_and_owned_results(
     headers = {"Authorization": f"Bearer {token}", "Idempotency-Key": "refresh"}
     caps = app.get("/v1/capabilities", headers=headers).json()
     assert set(caps["refresh_profiles"]["kupi"]) == set(fingerprints)
+    metadata = caps["profile_metadata"]["kupi"]
+    assert {item["fingerprint"] for item in metadata} == set(fingerprints)
+    assert {item["name"] for item in metadata} == {"one", "two"}
+    assert all(set(item) == {"name", "fingerprint", "scope", "coverage"} for item in metadata)
     for payload in (
         {"source_id": "kupi"},
         {"source_id": "tesco", "profile_fingerprint": fingerprints[0]},

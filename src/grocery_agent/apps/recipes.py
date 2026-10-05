@@ -69,6 +69,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="grocery-recipes")
     parser.add_argument("--provider", choices=("codex", "ollama", "template"))
     parser.add_argument("--model")
+    parser.add_argument("--language", choices=("cs", "en"), default="en")
     parser.add_argument("--servings", type=int, default=2)
     parser.add_argument("--meal-style", default="main")
     parser.add_argument("--have", action="append", default=[])
@@ -126,6 +127,7 @@ def _run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         parse_owned_stock(args.have)
         pantry = dict(item.split("=", 1) for item in args.have)
         values: dict[str, object] = {
+            "language": args.language,
             "servings": args.servings,
             "meal_style": args.meal_style,
             "pantry": pantry,

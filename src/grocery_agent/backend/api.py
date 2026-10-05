@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ConfigDict, Field, SecretStr, field_validator
 from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from grocery_agent.acquisition.profiles import profiled_adapter
 from grocery_agent.catalogue.api import create_app as catalogue_app
@@ -38,6 +39,16 @@ PUBLIC_AUTH = {
     "/v1/auth/capabilities",
 }
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+def error_payload(
+    detail: Any, code: str, fields: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """Add machine-readable diagnostics without changing legacy detail responses."""
+    payload = {"detail": detail, "code": code}
+    if fields is not None:
+        payload["fields"] = fields
+    return payload
 
 
 class InvitationInput(DomainModel):
@@ -129,7 +140,7 @@ def create_app(
             origin = request.headers.get("Origin")
             if origin is not None and origin != backend.trusted_origin:
                 return JSONResponse(
-                    {"detail": "Untrusted origin"},
+                    error_payload("Untrusted origin", "untrusted-origin"),
                     status_code=403,
                     headers={"Cache-Control": "no-store"},
                 )
@@ -142,7 +153,7 @@ def create_app(
                 cookie_mode = bool(token)
             if scheme.casefold() != "bearer" or not 20 <= len(token) <= 200:
                 return JSONResponse(
-                    {"detail": "Bearer session required"},
+                    error_payload("Bearer session required", "session-required"),
                     status_code=401,
                     headers={"WWW-Authenticate": "Bearer", "Cache-Control": "no-store"},
                 )
@@ -162,18 +173,21 @@ def create_app(
                             token, request.headers.get("X-CSRF-Token", "")
                         ):
                             return JSONResponse(
-                                {"detail": "CSRF token required"},
+                                error_payload("CSRF token required", "csrf-required"),
                                 status_code=403,
                                 headers={"Cache-Control": "no-store"},
                             )
             except AccessDenied:
                 return JSONResponse(
-                    {"detail": "Invalid or expired session"},
+                    error_payload("Invalid or expired session", "session-expired"),
                     status_code=401,
                     headers={"Cache-Control": "no-store"},
                 )
             except SQLAlchemyError:
-                return JSONResponse({"detail": "Control storage unavailable"}, status_code=503)
+                return JSONResponse(
+                    error_payload("Control storage unavailable", "storage-unavailable"),
+                    status_code=503,
+                )
         response: Response = await call_next(request)
         if request.url.path.startswith("/v1/"):
             response.headers["Cache-Control"] = "no-store"
@@ -185,36 +199,58 @@ def create_app(
     @app.exception_handler(RequestValidationError)
     async def invalid_input(request: Request, exc: RequestValidationError) -> JSONResponse:
         if request.url.path in PUBLIC_AUTH:
-            return JSONResponse({"detail": "Invalid authentication request"}, status_code=422)
+            return JSONResponse(
+                error_payload("Invalid authentication request", "authentication-invalid"),
+                status_code=422,
+            )
+        fields = [
+            {key: value for key, value in error.items() if key in {"type", "loc", "msg"}}
+            for error in exc.errors()
+        ]
         return JSONResponse(
-            {
-                "detail": [
-                    {key: value for key, value in error.items() if key in {"type", "loc", "msg"}}
-                    for error in exc.errors()
-                ]
-            },
+            error_payload(fields, "validation-error", fields),
             status_code=422,
         )
 
     @app.exception_handler(RateLimited)
     async def rate_limited(request: Request, exc: RateLimited) -> JSONResponse:
         return JSONResponse(
-            {"detail": "Authentication temporarily unavailable"},
+            error_payload("Authentication temporarily unavailable", "rate-limited"),
             status_code=429,
             headers={"Retry-After": str(backend.auth_rate_window_seconds)},
         )
 
     @app.exception_handler(SQLAlchemyError)
     async def storage_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:
-        return JSONResponse({"detail": "Control storage unavailable"}, status_code=503)
+        return JSONResponse(
+            error_payload("Control storage unavailable", "storage-unavailable"), status_code=503
+        )
 
     @app.exception_handler(Conflict)
     async def conflict(request: Request, exc: Conflict) -> JSONResponse:
-        return JSONResponse({"detail": str(exc)}, status_code=409)
+        return JSONResponse(error_payload(str(exc), "conflict"), status_code=409)
 
     @app.exception_handler(AccessDenied)
     async def denied(request: Request, exc: AccessDenied) -> JSONResponse:
-        return JSONResponse({"detail": str(exc)}, status_code=403)
+        return JSONResponse(error_payload(str(exc), "access-denied"), status_code=403)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        codes = {
+            400: "invalid-request",
+            401: "session-required",
+            403: "access-denied",
+            404: "not-found",
+            409: "conflict",
+            422: "validation-error",
+            429: "rate-limited",
+            503: "service-unavailable",
+        }
+        return JSONResponse(
+            error_payload(exc.detail, codes.get(exc.status_code, "request-failed")),
+            status_code=exc.status_code,
+            headers=exc.headers,
+        )
 
     def principal(request: Request) -> Principal:
         return request.state.principal  # type: ignore[no-any-return]
@@ -395,6 +431,27 @@ def create_app(
                 "ingredient_labels": {
                     key: value.label for key, value in catalog.ingredients.items()
                 },
+                "ingredient_localized_labels": {
+                    key: {
+                        language: getattr(value, "labels", {}).get(language, value.label)
+                        for language in ("cs", "en")
+                    }
+                    for key, value in catalog.ingredients.items()
+                },
+                "languages": ["cs", "en"],
+                "defaults": recipe_defaults(),
+                "retailer_ids": catalog.policy.retailers,
+                "profile_metadata": profile_metadata(),
+                "read_only_policy": {
+                    "currency": "CZK",
+                    "location_label": catalog.policy.location_label,
+                    "timezone": catalog.policy.timezone,
+                    "lactose_free": catalog.policy.lactose_free,
+                    "ranking": catalog.policy.ranking,
+                    "max_age_hours": catalog.policy.max_age_hours,
+                    "provider_timeout_seconds": backend.provider_timeout_seconds,
+                    "context_ingredients": backend.context_ingredients,
+                },
                 "meal_styles": ["main", "breakfast", "snack"],
                 "refresh_allowed": user.role == "admin"
                 and (
@@ -417,6 +474,49 @@ def create_app(
                 "offer_query_schema": CatalogueQuery.model_json_schema(),
             }
         )
+
+    def recipe_defaults() -> dict[str, Any]:
+        defaults = RecipeRequest().model_dump(mode="json", exclude={"request_id"})
+        defaults.update(
+            provider="codex"
+            if "codex" in backend.providers
+            else next(iter(backend.providers), None),
+            cache_policy=backend.default_cache_policy,
+            source_ids=[
+                catalog.policy.source_id
+                if catalog.policy.source_id in source_scopes
+                else next(iter(source_scopes))
+            ],
+            seasonings_available=catalog.pantry.seasonings_available,
+        )
+        for field in (
+            "min_protein_g",
+            "max_kcal",
+            "max_minutes",
+            "max_cost_per_serving_czk",
+            "allow_loyalty",
+        ):
+            defaults[field] = catalog.policy.model_dump(mode="json")[field]
+        return defaults
+
+    def profile_metadata() -> dict[str, list[dict[str, Any]]]:
+        metadata: dict[str, list[dict[str, Any]]] = {}
+        for profile in backend.acquisition_profiles:
+            if profile.source_id not in source_scopes:
+                continue
+            try:
+                _, resolved = profiled_adapter(default_registry(), profile)
+            except ValueError:
+                continue
+            metadata.setdefault(profile.source_id, []).append(
+                {
+                    "name": resolved.name,
+                    "fingerprint": resolved.fingerprint,
+                    "scope": resolved.scope,
+                    "coverage": resolved.coverage,
+                }
+            )
+        return metadata
 
     def refresh_profiles() -> dict[str, tuple[str, ...]]:
         result: dict[str, list[str]] = {}
@@ -510,6 +610,10 @@ def create_app(
     from grocery_agent.backend.channel_api import mount_channels
 
     mount_channels(app, repository, backend, clock, principal, capabilities, validate_request)
+
+    from grocery_agent.backend.user_state import mount_user_state
+
+    mount_user_state(app, repository, principal, clock, validate_request)
 
     @app.post("/v1/recipes", status_code=202, response_model=JobView)
     def submit(

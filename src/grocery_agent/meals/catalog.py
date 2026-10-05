@@ -41,6 +41,11 @@ class Nutrients(DomainModel):
 
 class Ingredient(DomainModel):
     label: NonEmpty
+    labels: dict[Literal["cs", "en"], NonEmpty] = Field(default_factory=dict)
+
+    def localized_label(self, language: Literal["cs", "en"] = "en") -> str:
+        return self.labels.get(language, self.label)
+
     name_pattern: str | None = None
     exclude_pattern: str = (
         r"šunka|s kostí|obalovan|marinovan|ochucen|hotov|vařen|konzerv|mléčn|směs|omáčk|paštik"
@@ -72,11 +77,28 @@ class Ingredient(DomainModel):
 
 class Recipe(DomainModel):
     title: NonEmpty
+    titles: dict[Literal["cs", "en"], NonEmpty] = Field(default_factory=dict)
+    translated_steps: dict[Literal["cs", "en"], tuple[NonEmpty, ...]] = Field(default_factory=dict)
     meal_style: MealStyle = "main"
     minutes: int = Field(gt=0)
     # Raw purchased mass per serving; edible fractions account for vegetable trimming.
     grams: dict[str, Positive]
     steps: tuple[NonEmpty, ...] = Field(min_length=1)
+
+    def localized(self, language: Literal["cs", "en"] = "en") -> Recipe:
+        return self.model_copy(
+            update={
+                "title": self.titles.get(language, self.title),
+                "steps": self.translated_steps.get(language, self.steps),
+            }
+        )
+
+    @field_validator("translated_steps")
+    @classmethod
+    def nonempty_translations(cls, value: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+        if any(not steps for steps in value.values()):
+            raise ValueError("translated steps must not be empty")
+        return value
 
 
 class MealPolicy(DomainModel):

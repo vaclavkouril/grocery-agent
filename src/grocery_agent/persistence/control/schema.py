@@ -33,6 +33,16 @@ class ProfileRow(ControlBase):
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime)
 
 
+class AccountStateRow(ControlBase):
+    __tablename__ = "account_state"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    settings_revision: Mapped[int] = mapped_column(Integer, default=0)
+    ui_language: Mapped[str | None] = mapped_column(String(2))
+    recipe_language: Mapped[str | None] = mapped_column(String(2))
+    pantry_revision: Mapped[int] = mapped_column(Integer, default=0)
+    pantry_items: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
 class SessionRow(ControlBase):
     __tablename__ = "sessions"
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)

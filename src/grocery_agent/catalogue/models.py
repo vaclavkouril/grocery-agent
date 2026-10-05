@@ -43,6 +43,7 @@ class CatalogueState(DomainModel):
     latest_run_status: str
     degraded: bool = False
     warnings: tuple[str, ...] = ()
+    warning_codes: tuple[str, ...] = ()
     profile_fingerprint: str = "legacy"
     coverage_complete: bool = False
     actual_scope: str | None = None

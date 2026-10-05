@@ -136,7 +136,7 @@ output copies must be outside that immutable tree. Backend results remain privat
 stored in the separate control database. Inputs include effective parameters, nutrition context, all
 selected collections, provenance and prompt version. Later collections cannot alter persisted results.
 
-Current migration heads are `offers_0003` and `control_0004`; production storage is never migrated
+Current migration heads are `offers_0003` and `control_0005`; production storage is never migrated
 automatically. Live model, retailer and container acceptance runs remain separately configured.
 Shared TOML defaults and portable installed application startup are documented in
 [configuration](configuration.md). The optional password/cookie session flow is in [backend](backend.md).
@@ -148,6 +148,14 @@ and `--have-seasonings`. Nutrition/time constraints are evaluated deterministica
 valid but infeasible draft does not trigger repair. Retailers can only narrow a configured allowlist,
 and use-first ingredients must exist in known owned pantry stock.
 
+`RecipeRequest.language` accepts `cs` or `en`, defaulting to `en` for existing callers.
+Use `grocery-recipes --language cs`, or `recipe language=cs` in a channel command. New requests
+pin the language and `recipe-draft-v2` prompt version in their ingredient snapshot. Models receive
+the requested language for titles and preparation steps; template recipes use configured
+`titles` and `translated_steps`. Ingredient `labels` may provide Czech and English display names,
+with the existing `label` as fallback. Report headings and amounts follow the request language;
+changing the website language does not translate or regenerate historical reports.
+
 ## Local model benchmarking
 
 The local-only benchmark runs model-written recipes against pinned cached offers and the same
@@ -155,3 +163,5 @@ recipe service and Decimal evaluator. It records raw responses, request and toke
 times, repairs, rejections, and model memory metadata. It never acquires or migrates grocery data.
 `--inputs-from` replays historical cases without rereading a changing cache. See the
 [machine-specific comparison and reproduction commands](local-model-benchmark.md).
+The [second round](model-benchmark-round-two.md) compares five more local models with budget
+Codex models and documents token consumption, quota limitations, and cost estimates.

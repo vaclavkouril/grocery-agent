@@ -356,7 +356,7 @@ def test_channel_migration_preserves_existing_jobs_and_pending_outbox(tmp_path: 
                 ),
                 {"now": NOW.isoformat()},
             )
-        assert upgrade_database(engine, "control") == "control_0004"
+        assert upgrade_database(engine, "control") == "control_0005"
         repository = ControlRepository(engine)
         with repository.sessions() as session:
             row = session.get(OutboxRow, "delivery")

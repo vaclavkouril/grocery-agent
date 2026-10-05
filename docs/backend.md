@@ -141,6 +141,42 @@ restricted, leave registration off and use invitations. Public registration lets
 allowed recipe jobs, potentially incurring provider costs; review provider permissions and queue
 limits before enabling it. Administrator operations remain separately protected.
 
+## Account preferences, pantry and presets
+
+Before starting the updated API and worker, back up the control database and run
+`.venv/bin/grocery-agent db upgrade control`. The additive `control_0005` migration adds
+account state without changing offers, existing profiles, jobs or immutable reports. Startup
+does not migrate production storage automatically; the offer head remains `offers_0003`.
+
+All account-state routes require authentication, apply cookie CSRF protection, and address only
+the current account. An administrator cannot use these routes to inspect another user's stock.
+
+| Route | Behavior |
+| --- | --- |
+| `GET /v1/me/settings` | Read revision and nullable `ui_language` / `recipe_language` (`cs` or `en`). |
+| `PATCH /v1/me/settings` | Change supplied preferences with `expected_revision`; null clears a preference. |
+| `GET /v1/me/pantry` | Read revision and saved ingredient items. |
+| `PUT /v1/me/pantry` | Replace items with `expected_revision`; maximum 200 items. |
+| `GET /v1/me/presets` | List owned presets and whether their parameters are stale under current policy. |
+| `POST /v1/me/presets` | Create `{name,parameters}`; maximum 100 presets, names up to 100 characters. |
+| `GET/PATCH /v1/me/presets/{id}` | Read or update an owned preset; PATCH requires `expected_revision`. |
+| `DELETE /v1/me/presets/{id}?expected_revision=N` | Delete an owned preset at its current revision. |
+| `GET /v1/jobs/{id}/request` | Retrieve the owned recipe request, including failed or cancelled jobs. |
+
+Pantry items have the shape `{"rice":{"grams":"500.25","use_first":true}}`.
+`grams` is an exact positive decimal string, or null for enough available stock. Saving pantry is
+explicit; submitting or completing recipes never deducts stock. Presets reject `pantry`,
+`use_first` and `request_id`, so applying preferences does not restore old stock or reuse an
+idempotency key. Existing profile rows are preserved and unsupported legacy parameters are
+marked stale, not silently converted. Conflicting revisions return HTTP 409; reload before
+retrying rather than overwriting another session's changes.
+
+Capabilities retain existing fields and additionally advertise languages, effective recipe
+defaults, retailer IDs, configured profile metadata, localized ingredient labels and read-only
+server policy. Profile metadata excludes acquisition credentials and options. API errors retain
+`detail` while adding stable `code`; validation responses include sanitized `fields` without
+echoing input. Catalogue responses retain raw warnings and add `warning_codes` for translated UI.
+
 ## Jobs, recovery and channels
 
 Jobs are deduplicated by `(user_id, Idempotency-Key)`; reusing a key for different parameters returns

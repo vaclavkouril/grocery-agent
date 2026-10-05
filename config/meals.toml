@@ -45,6 +45,7 @@ max_cost_per_serving_czk = "60"
 
 [ingredients.chicken]
 label = "Skinless boneless chicken breast (raw)"
+labels = {en="Skinless boneless chicken breast (raw)", cs="Kuřecí prsa bez kůže a kostí (syrová)"}
 name_pattern = '^kuřecí prsní řízky(?:\s|$)'
 lactose_free = true
 nutrition_source = "https://www.nutridatabaze.cz/potraviny/?id=230"
@@ -52,6 +53,7 @@ nutrients_per_100g_edible = {kcal="102", protein_g="22.8", carbs_g="0", fat_g="1
 
 [ingredients.turkey]
 label = "Skinless boneless turkey breast (raw)"
+labels = {en="Skinless boneless turkey breast (raw)", cs="Krůtí prsa bez kůže a kostí (syrová)"}
 name_pattern = '^krůtí (?:prsní řízky|prsa)(?:\s|$)'
 lactose_free = true
 nutrition_source = "https://www.nutridatabaze.cz/potraviny/?id=452"
@@ -59,6 +61,7 @@ nutrients_per_100g_edible = {kcal="107", protein_g="24.2", carbs_g="0", fat_g="1
 
 [ingredients.lentils]
 label = "Red lentils (dry)"
+labels = {en="Red lentils (dry)", cs="Červená čočka (suchá)"}
 name_pattern = '^(?:čočka červená|červená čočka)(?:\s|$)'
 lactose_free = true
 nutrition_source = "https://www.nutridatabaze.cz/potraviny/?id=647"
@@ -66,6 +69,7 @@ nutrients_per_100g_edible = {kcal="313", protein_g="24.7", carbs_g="39.2", fat_g
 
 [ingredients.rice]
 label = "White rice (dry; generic nutrition estimate)"
+labels = {en="White rice (dry; generic nutrition estimate)", cs="Bílá rýže (suchá; obecný odhad živin)"}
 name_pattern = '^(?:rýže (?:dlouhozrnná|loupaná|jasmínová)|jasmínová rýže)(?:\s|$)'
 exclude_pattern = 'natural|neloupan|celozrnn|obalovan|marinovan|ochucen|hotov|vařen|mléčn|směs|omáčk'
 lactose_free = true
@@ -74,6 +78,7 @@ nutrients_per_100g_edible = {kcal="351", protein_g="7.2", carbs_g="78.7", fat_g=
 
 [ingredients.carrot]
 label = "Carrots (raw, before trimming)"
+labels = {en="Carrots (raw, before trimming)", cs="Mrkev (syrová, před očištěním)"}
 name_pattern = '^mrkev(?:\s|$)'
 lactose_free = true
 # Conservative database edible-yield coefficient, including trimming loss.
@@ -83,6 +88,7 @@ nutrients_per_100g_edible = {kcal="36", protein_g="1", carbs_g="6.1", fat_g="0.2
 
 [ingredients.onion]
 label = "Onion (raw, before peeling)"
+labels = {en="Onion (raw, before peeling)", cs="Cibule (syrová, před oloupáním)"}
 name_pattern = '^cibule kuchyňská(?:\s|$)'
 lactose_free = true
 edible_fraction = "0.92"
@@ -91,6 +97,7 @@ nutrients_per_100g_edible = {kcal="39", protein_g="1.4", carbs_g="6.6", fat_g="0
 
 [ingredients.oil]
 label = "Rapeseed oil (pantry estimate)"
+labels = {en="Rapeseed oil (pantry estimate)", cs="Řepkový olej (odhad ze zásob)"}
 lactose_free = true
 pantry_price_per_kg_czk = "200"
 nutrition_source = "https://www.nutridatabaze.cz/potraviny/?id=84"
@@ -98,6 +105,7 @@ nutrients_per_100g_edible = {kcal="898", protein_g="0", carbs_g="0", fat_g="99.8
 
 [ingredients.oats]
 label = "Plain oat flakes (dry; generic nutrition estimate)"
+labels = {en="Plain oat flakes (dry; generic nutrition estimate)", cs="Neochucené ovesné vločky (suché; obecný odhad živin)"}
 name_pattern = '^(?:ovesné vločky|vločky ovesné)(?:\s|$)'
 exclude_pattern = 'ochucen|hotov|mléčn|směs|čokol|ovoc|granola'
 lactose_free = true
@@ -106,6 +114,8 @@ nutrients_per_100g_edible = {kcal="353", protein_g="13.1", carbs_g="55.8", fat_g
 
 [[recipes]]
 title = "Smoky chicken with creamy red lentils and roasted carrots"
+titles = {en="Smoky chicken with creamy red lentils and roasted carrots", cs="Kuře s uzenou paprikou, krémovou červenou čočkou a pečenou mrkví"}
+translated_steps = {en=["Peel and chop the carrots and onion. Cut the plain chicken breast into strips. Use only dairy-free ingredients; check any seasoning blend's label.", "Toss the carrots with half the oil, salt, cumin and smoked paprika. Roast at 210 °C until browned and tender, about 20–25 minutes.", "Soften the onion in the remaining oil. Stir in the rinsed dry red lentils, paprika and about 250 ml water per serving. Simmer 12–18 minutes until soft; add water as needed. Mash lightly for a creamy texture without dairy.", "Season the chicken with paprika, pepper and salt. Brown it in a nonstick pan and cook through. Spoon the lentils onto a plate, top with chicken and carrots. Optional pantry vinegar adds brightness; no cream or butter."], cs=["Oloupejte a nakrájejte mrkev a cibuli. Neochucená kuřecí prsa nakrájejte na proužky. Používejte suroviny bez mléka a ověřte etiketu kořenicí směsi.","Mrkev promíchejte s polovinou oleje, solí, římským kmínem a uzenou paprikou. Pečte při 210 °C asi 20–25 minut doměkka a dozlatova.","Na zbývajícím oleji změkněte cibuli. Přidejte propláchnutou suchou červenou čočku, papriku a asi 250 ml vody na porci. Vařte 12–18 minut doměkka, podle potřeby dolévejte vodu. Lehce rozmačkejte pro krémovou konzistenci bez mléka.","Kuře osolte a okořeňte paprikou a pepřem. Opečte na nepřilnavé pánvi a důkladně propečte. Podávejte s čočkou a mrkví. Volitelně přidejte trochu octa ze zásob; nepoužívejte smetanu ani máslo."]}
 minutes = 35
 grams = {chicken="300", lentils="80", carrot="200", onion="50", oil="10"}
 steps = [
@@ -117,6 +127,8 @@ steps = [
 
 [[recipes]]
 title = "Paprika chicken and red lentil skillet"
+titles = {en="Paprika chicken and red lentil skillet", cs="Kuřecí pánev s paprikou a červenou čočkou"}
+translated_steps = {en=["Peel and chop the onion and carrots. Slice plain chicken breast and rinse the dry lentils. Choose dairy-free seasonings.", "Brown the chicken in the oil with smoked paprika, salt and pepper. Remove it to a plate.", "Soften the onion and carrots in the pan, then add the lentils and about 250 ml water per serving. Simmer until tender, adding water as needed.", "Return the chicken and finish cooking it through. Adjust salt and pepper and serve; optional pantry vinegar brightens the lentils."], cs=["Oloupejte a nakrájejte cibuli a mrkev. Nakrájejte neochucená kuřecí prsa a propláchněte suchou čočku. Používejte koření bez mléka.","Kuře opečte na oleji s uzenou paprikou, solí a pepřem. Odložte na talíř.","Na pánvi změkněte cibuli a mrkev, přidejte čočku a asi 250 ml vody na porci. Vařte doměkka a podle potřeby dolévejte vodu.","Vraťte kuře a důkladně ho propečte. Dochuťte solí a pepřem a podávejte; volitelně přidejte ocet ze zásob."]}
 minutes = 30
 grams = {chicken="250", lentils="80", carrot="200", onion="50", oil="10"}
 steps = [
@@ -128,6 +140,8 @@ steps = [
 
 [[recipes]]
 title = "Cumin chicken with rice and roasted carrots"
+titles = {en="Cumin chicken with rice and roasted carrots", cs="Kuře na římském kmínu s rýží a pečenou mrkví"}
+translated_steps = {en=["Cook the dry white rice in water according to its packet instructions. Peel and chop the vegetables.", "Roast the carrots and onion at 210 °C with half the oil, cumin, pepper and salt until tender.", "Slice plain chicken breast and season it with paprika and cumin. Brown in the remaining oil and cook through.", "Serve the chicken over rice with the roasted vegetables. Use dairy-free seasoning blends; no butter, cream or cheese."], cs=["Suchou bílou rýži uvařte ve vodě podle návodu na obalu. Oloupejte a nakrájejte zeleninu.","Mrkev a cibuli pečte při 210 °C s polovinou oleje, římským kmínem, pepřem a solí doměkka.","Neochucená kuřecí prsa nakrájejte a okořeňte paprikou a římským kmínem. Opečte na zbytku oleje a důkladně propečte.","Podávejte kuře s rýží a pečenou zeleninou. Používejte koření bez mléka; nepřidávejte máslo, smetanu ani sýr."]}
 minutes = 35
 grams = {chicken="300", rice="70", carrot="200", onion="50", oil="10"}
 steps = [
@@ -139,6 +153,8 @@ steps = [
 
 [[recipes]]
 title = "Cumin turkey with rice and roasted carrots"
+titles = {en="Cumin turkey with rice and roasted carrots", cs="Krůta na římském kmínu s rýží a pečenou mrkví"}
+translated_steps = {en=["Cook the dry white rice in water according to its packet instructions. Peel and chop the vegetables.", "Roast the carrots and onion at 210 °C with half the oil, cumin, pepper and salt until tender.", "Slice plain turkey breast and season it with paprika and cumin. Brown in the remaining oil and cook through.", "Serve the turkey over rice with the roasted vegetables. Use dairy-free seasoning blends; no butter, cream or cheese."], cs=["Suchou bílou rýži uvařte ve vodě podle návodu na obalu. Oloupejte a nakrájejte zeleninu.","Mrkev a cibuli pečte při 210 °C s polovinou oleje, římským kmínem, pepřem a solí doměkka.","Neochucená krůtí prsa nakrájejte a okořeňte paprikou a římským kmínem. Opečte na zbytku oleje a důkladně propečte.","Podávejte krůtu s rýží a pečenou zeleninou. Používejte koření bez mléka; nepřidávejte máslo, smetanu ani sýr."]}
 minutes = 35
 grams = {turkey="300", rice="70", carrot="200", onion="50", oil="10"}
 steps = [
@@ -150,6 +166,8 @@ steps = [
 
 [[recipes]]
 title = "Savory chicken oat porridge"
+titles = {en="Savory chicken oat porridge", cs="Slaná ovesná kaše s kuřetem"}
+translated_steps = {en=["Peel and grate the carrot and chop the onion. Slice plain chicken breast into thin strips.", "Soften the onion and carrot in the oil, add the chicken and cook through with salt, pepper and paprika.", "Stir in plain dry oat flakes and about 200 ml water per serving. Simmer until creamy, adding water as needed; use water rather than milk.", "Serve as a savory breakfast bowl. Use dairy-free seasonings and no butter or cream."], cs=["Oloupejte a nastrouhejte mrkev a nakrájejte cibuli. Neochucená kuřecí prsa nakrájejte na tenké proužky.","Na oleji změkněte cibuli a mrkev, přidejte kuře, sůl, pepř a papriku a důkladně propečte.","Vmíchejte neochucené suché ovesné vločky a asi 200 ml vody na porci. Vařte do krémové konzistence a podle potřeby dolévejte vodu; místo mléka použijte vodu.","Podávejte jako slanou snídaňovou kaši. Používejte koření bez mléka a nepřidávejte máslo ani smetanu."]}
 meal_style = "breakfast"
 minutes = 20
 grams = {chicken="160", oats="50", carrot="80", onion="30", oil="5"}
@@ -162,6 +180,8 @@ steps = [
 
 [[recipes]]
 title = "Chicken rice breakfast porridge"
+titles = {en="Chicken rice breakfast porridge", cs="Snídaňová rýžová kaše s kuřetem"}
+translated_steps = {en=["Rinse the dry rice. Peel and grate the carrot and chop the onion.", "Soften the vegetables in the oil. Add rice and about 350 ml water per serving, then simmer until the rice is very soft, adding water if needed.", "Add thinly sliced plain chicken and cook through. Season the porridge with salt, pepper and cumin; use dairy-free seasonings."], cs=["Propláchněte suchou rýži. Oloupejte a nastrouhejte mrkev a nakrájejte cibuli.","Na oleji změkněte zeleninu. Přidejte rýži a asi 350 ml vody na porci a vařte, dokud rýže není velmi měkká; podle potřeby dolévejte vodu.","Přidejte neochucené kuře nakrájené na tenké plátky a důkladně propečte. Osolte a okořeňte pepřem a římským kmínem; používejte koření bez mléka."]}
 meal_style = "breakfast"
 minutes = 35
 grams = {chicken="160", rice="50", carrot="80", onion="30", oil="5"}
@@ -173,6 +193,8 @@ steps = [
 
 [[recipes]]
 title = "Paprika chicken bites with carrot sticks"
+titles = {en="Paprika chicken bites with carrot sticks", cs="Kuřecí kousky s paprikou a mrkvovými tyčinkami"}
+translated_steps = {en=["Peel the carrot and cut it into sticks. Cut plain chicken breast into bite-size pieces.", "Coat the chicken in oil, paprika, salt and pepper. Cook through in a nonstick pan.", "Serve the small chicken portion with crunchy carrot sticks, without dairy-based dips."], cs=["Oloupejte mrkev a nakrájejte ji na tyčinky. Neochucená kuřecí prsa nakrájejte na sousta.","Kuře promíchejte s olejem, paprikou, solí a pepřem. Na nepřilnavé pánvi důkladně propečte.","Malou porci kuřete podávejte s křupavou mrkví, bez mléčných dipů."]}
 meal_style = "snack"
 minutes = 15
 grams = {chicken="120", carrot="100", oil="5"}
@@ -184,6 +206,8 @@ steps = [
 
 [[recipes]]
 title = "Mini turkey patties with carrots"
+titles = {en="Mini turkey patties with carrots", cs="Krůtí placičky s mrkví"}
+translated_steps = {en=["Finely chop plain turkey breast and peeled onion. Season with salt, pepper and cumin.", "Shape small patties and cook through in the oil. Peel and slice the carrot while they cook.", "Serve two or three mini patties with carrot sticks; the snack needs no cheese, butter or cream."], cs=["Neochucená krůtí prsa a oloupanou cibuli jemně nasekejte. Osolte a okořeňte pepřem a římským kmínem.","Vytvarujte malé placičky a na oleji důkladně propečte. Mezitím oloupejte a nakrájejte mrkev.","Podávejte dvě až tři malé placičky s mrkvovými tyčinkami; svačina nepotřebuje sýr, máslo ani smetanu."]}
 meal_style = "snack"
 minutes = 20
 grams = {turkey="150", carrot="100", onion="20", oil="5"}

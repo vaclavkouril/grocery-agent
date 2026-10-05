@@ -14,6 +14,7 @@ from grocery_agent.application.parameters import (
     resolve_parameters,
 )
 from grocery_agent.config import Settings
+from grocery_agent.localization import Language, translate
 from grocery_agent.meals.catalog import MealCatalog, Recipe
 from grocery_agent.meals.planner import matches, plan_meals, rejection_reason
 from grocery_agent.meals.report import render_html
@@ -180,7 +181,8 @@ class RecipeService:
         context = {key: catalog.ingredients[key].model_dump(mode="json") for key in selected}
         inputs["catalog"] = catalog.model_dump(mode="json")
         inputs["ingredient_context"] = context
-        inputs["prompt_version"] = "recipe-draft-v1"
+        inputs["prompt_version"] = "recipe-draft-v2"
+        inputs["language"] = request.language
         inputs["effective_request"] = request.model_dump(mode="json")
         inputs["offers"] = [
             {
@@ -198,6 +200,11 @@ class RecipeService:
         return self.execute(request, self.prepare(request))
 
     def execute(self, request: RecipeRequest, inputs: dict[str, Any]) -> tuple[dict[str, Any], str]:
+        language: Language = inputs.get("language", request.language)
+        if language not in {"cs", "en"}:
+            raise ValueError("pinned recipe language must be cs or en")
+        if "language" in inputs and language != request.language:
+            raise ValueError("pinned recipe language does not match request")
         fingerprint = inputs.get("profile_fingerprint", "legacy")
         expected = request.profile_fingerprints or (
             {request.source_ids[0]: request.profile_fingerprint}
@@ -221,6 +228,7 @@ class RecipeService:
             "catalogue_snapshot": inputs.get("catalogue_snapshot"),
             "collections": inputs.get("collections", []),
             "effective_request": inputs.get("effective_request", request.model_dump(mode="json")),
+            "language": language,
         }
         catalog = MealCatalog.model_validate(inputs["catalog"])
         reader = SnapshotReader(inputs)
@@ -234,7 +242,15 @@ class RecipeService:
                 "request_id": str(request.request_id),
                 "run_id": reader.batch.run_id,
                 "reason": "No configured template remains after exclusions.",
-            }, "<p>No feasible recipe.</p>"
+                "reason_code": "no-template-after-exclusions",
+                "reason_localized": translate(
+                    "No configured template remains after exclusions.", language
+                ),
+            }, no_feasible_html(language, "No configured template remains after exclusions.")
+        if request.provider == "template":
+            catalog = catalog.model_copy(
+                update={"recipes": tuple(recipe.localized(language) for recipe in catalog.recipes)}
+            )
         if request.provider != "template":
             provider = self.provider
             if provider is None:
@@ -294,7 +310,11 @@ class RecipeService:
                 "request_id": str(request.request_id),
                 "run_id": reader.batch.run_id,
                 "reason": str(exc),
-            }, "<p>No feasible recipe.</p>"
+                "reason_code": "no-complete-recipe-within-limits",
+                "reason_localized": translate(
+                    "No complete recipe meets the configured limits.", language
+                ),
+            }, no_feasible_html(language, "No complete recipe meets the configured limits.")
         return {
             **metadata,
             "status": "ok",
@@ -303,4 +323,14 @@ class RecipeService:
             "model": request.model,
             "prompt_version": inputs["prompt_version"],
             "report": report.model_dump(mode="json"),
-        }, render_html(report, catalog)
+        }, render_html(report, catalog, language=language)
+
+
+def no_feasible_html(language: Language, reason: str) -> str:
+    import html
+
+    return (
+        f'<!doctype html><html lang="{language}"><meta charset="utf-8">'
+        f"<h1>{html.escape(translate('No feasible recipe.', language))}</h1>"
+        f"<p>{html.escape(translate(reason, language))}</p></html>"
+    )
