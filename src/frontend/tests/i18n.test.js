@@ -98,11 +98,12 @@ test('account writes include revisions, CSRF and scoped IDs; presets omit transi
   const calls = [], api = new GroceryClient(async (path, options) => { calls.push([path, options]); return new Response('{}'); });
   api.setSession({session_mode: 'cookie', csrf_token: 'private-csrf'});
   await api.saveSettings({ui_language: 'cs', expected_revision: 3}); await api.savePantry({rice: {grams: '1', use_first: false}}, 4);
-  const request = {provider: 'template', pantry: {rice: '1g'}, use_first: ['rice'], request_id: 'old', language: 'en'};
+  const request = {provider: 'template', pantry: {rice: '1g'}, use_first: ['rice'], condiments: ['salt'], request_id: 'old', language: 'en'};
   await api.createPreset('Sign out', request); await api.updatePreset('a/b', 'Edited', request, 5); await api.deletePreset('a/b', 6); await api.jobRequest('a/b');
   assert.deepEqual(JSON.parse(calls[1][1].body), {items: {rice: {grams: '1', use_first: false}}, expected_revision: 4});
   for (const [, options] of calls.slice(0, 5)) assert.equal(options.headers.get('X-CSRF-Token'), 'private-csrf');
   for (const index of [2, 3]) assert.deepEqual(JSON.parse(calls[index][1].body).parameters, presetParameters(request));
+  assert.equal(Object.hasOwn(presetParameters(request), 'condiments'), false);
   assert.equal(calls[3][0], '/v1/me/presets/a%2Fb'); assert.equal(calls[3][1].method, 'PATCH');
   assert.equal(calls[4][0], '/v1/me/presets/a%2Fb?expected_revision=6'); assert.equal(calls[5][0], '/v1/jobs/a%2Fb/request');
 });
@@ -134,4 +135,30 @@ test('revision conflicts preserve local edits and prevent writes until explicit 
   assert.equal(context.stock, undefined); assert.equal($('save-pantry').disabled, true); assert.equal($('pantry-rows').value, 'local edit');
   await AccountUI.prototype.operation.call(context, 'preset', async () => { throw new ApiError(409, 'Revision conflict', 'conflict'); });
   assert.equal(context.presetConflict, true); assert.equal($('update-preset').disabled, true); assert.equal($('preset-name').value, 'local edit');
+});
+
+test('clearing account stores uses unpersonalized shopping defaults across both screens', () => {
+  const elements = new Map(); const $ = id => {
+    if (!elements.has(id)) elements.set(id, {value: '', dispatchEvent() {}});
+    return elements.get(id);
+  };
+  const context = {$, capabilities: () => ({defaults: {retailer_ids: ['old-store'], max_stores: 3}, shopping_defaults: {retailer_ids: [], max_stores: 1}})};
+  AccountUI.prototype.applyStorePreferences.call(context, {retailer_ids: null, max_stores: null});
+  assert.equal($('recipe-retailers').value, ''); assert.equal($('offer-retailer').value, ''); assert.equal($('max-stores').value, 1);
+  AccountUI.prototype.applyStorePreferences.call(context, {retailer_ids: ['billa', 'tesco'], max_stores: 2});
+  assert.equal($('recipe-retailers').value, 'billa, tesco'); assert.equal($('offer-retailer').value, 'billa, tesco'); assert.equal($('max-stores').value, 2);
+  context.capabilities = () => ({defaults: {max_stores: 3}, recipe_request_schema: {properties: {max_stores: {default: 1}}}});
+  AccountUI.prototype.applyStorePreferences.call(context, {retailer_ids: null, max_stores: null});
+  assert.equal($('max-stores').value, 1);
+});
+
+test('unsaved cuisine name suggestions translate, but saved or selected names stay literal', () => {
+  const elements = new Map([['preset-name', {value: ''}], ['quick-preset-name', {value: ''}]]);
+  const context = {$: id => elements.get(id), setPresetName(name) { AccountUI.prototype.setPresetName.call(this, name); }};
+  AccountUI.prototype.suggestPresetName.call(context, 'Greek');
+  AccountUI.prototype.suggestPresetName.call(context, 'Řecká');
+  assert.equal(elements.get('quick-preset-name').value, 'Řecká');
+  context.setPresetName('Greek');
+  AccountUI.prototype.suggestPresetName.call(context, 'Řecká');
+  assert.equal(elements.get('quick-preset-name').value, 'Greek'); assert.equal(elements.get('preset-name').value, 'Greek');
 });

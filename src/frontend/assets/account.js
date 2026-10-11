@@ -2,13 +2,13 @@ import {pantryItems} from './client.js';
 import {language, t, errorMessage, sourceKey} from './i18n.js';
 
 export const fieldLabels = {
-  request_id: 'Request ID', servings: 'Servings', meal_style: 'Meal style', pantry: 'Pantry stock', exclusions: 'Exclusions',
-  max_cost_per_serving_czk: 'Budget', max_stores: 'Maximum stores', retailer_ids: 'Retailer IDs · comma-separated',
+  request_id: 'Request ID', cuisine: 'Cuisine', recipe_count: 'Number of recipes', condiments: 'Condiments', servings: 'Servings', meal_style: 'Meal style', pantry: 'Pantry stock', exclusions: 'Exclusions',
+  max_cost_per_serving_czk: 'Budget', max_stores: 'Maximum stores', retailer_ids: 'Retailers',
   allow_loyalty: 'Loyalty prices', min_protein_g: 'Minimum protein', max_kcal: 'Maximum calories', max_minutes: 'Cooking time',
   use_first: 'Use first', seasonings_available: 'Seasonings available', provider: 'Recipe provider', model: 'Model',
   cache_policy: 'Grocery cache policy', source_ids: 'Sources', profile_fingerprint: 'Profile', profile_fingerprints: 'Profile', language: 'Recipe language',
 };
-const controls = {servings: 'servings', meal_style: 'meal-style', max_cost_per_serving_czk: 'budget', max_stores: 'max-stores',
+const controls = {cuisine: 'cuisine', recipe_count: 'recipe-count', servings: 'servings', meal_style: 'meal-style', max_cost_per_serving_czk: 'budget', max_stores: 'max-stores',
   min_protein_g: 'min-protein', max_kcal: 'max-kcal', max_minutes: 'max-minutes', allow_loyalty: 'recipe-loyalty',
   seasonings_available: 'have-seasonings', provider: 'provider', model: 'model', cache_policy: 'cache-policy', language: 'recipe-language', retailer_ids: 'recipe-retailers'};
 const policyLabels = {currency: 'Currency', location_label: 'Location', timezone: 'Timezone', lactose_free: 'Lactose free', ranking: 'Ranking', max_age_hours: 'Maximum data age · hours', provider_timeout_seconds: 'Provider timeout · seconds', context_ingredients: 'Context ingredients'};
@@ -24,37 +24,48 @@ export class AccountUI {
     on('apply-preset', 'click', () => this.applyPreset());
     on('reload-presets', 'click', () => this.loadPresets());
     on('create-preset', 'click', () => this.writePreset('create'));
+    this.$('quick-save-preset')?.addEventListener('click', () => this.run(() => this.writePreset('create', 'quick-preset-name')));
+    this.$('quick-preset-name')?.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' || event.isComposing) return;
+      event.preventDefault(); this.run(() => this.writePreset('create', 'quick-preset-name'));
+    });
+    for (const [id, other] of [['preset-name', 'quick-preset-name'], ['quick-preset-name', 'preset-name']]) this.$(id)?.addEventListener('input', () => { if (this.$(other)) this.$(other).value = this.$(id).value; });
     on('update-preset', 'click', () => this.writePreset('update')); on('delete-preset', 'click', () => this.writePreset('delete'));
     this.$('preset-select').addEventListener('change', () => {
-      const selected = this.selectedPreset(); this.$('preset-name').value = selected?.name ?? '';
+      const selected = this.selectedPreset(); this.setPresetName(selected?.name ?? ''); this.syncPresetControls();
       if (selected?.stale) this.status('preset', 'This preset is no longer supported. Update or delete it before applying.');
     });
     this.$('binding-form').addEventListener('submit', event => { event.preventDefault(); this.run(() => this.connect()); });
   }
   clear() {
-    this.settings = this.stock = undefined; this.presets = []; this.connections = []; this.presetConflict = false; this.pendingLanguage = undefined; this.busy?.clear();
+    this.settings = this.stock = undefined; this.presets = []; this.connections = []; this.presetConflict = false; this.pendingLanguage = this.suggestedPresetName = undefined; this.busy?.clear();
     for (const id of ['pantry-status', 'settings-status', 'preset-status', 'binding-status', 'binding-list', 'policy-details']) this.$(id)?.replaceChildren();
-    for (const id of ['preset-name', 'binding-address', 'account-ui-language', 'account-recipe-language']) if (this.$(id)) this.$(id).value = '';
+    for (const id of ['preset-name', 'quick-preset-name', 'binding-address', 'account-ui-language', 'account-recipe-language', 'account-retailers', 'account-max-stores']) if (this.$(id)) this.$(id).value = '';
+    this.$('quick-preset-status')?.replaceChildren();
     for (const id of ['save-settings', 'save-pantry']) if (this.$(id)) this.$(id).disabled = true;
     this.$('preset-select')?.replaceChildren(this.option('', 'Choose a preset'));
+    this.syncPresetControls();
   }
   option(value, label, literal = false) { const option = this.node('option'); option.textContent = literal ? label : t(label); option.value = value; return option; }
-  status(id, key) { key = sourceKey(key); const target = this.$(id + '-status'); target.textContent = t(key); target.dataset.i18n = key; }
+  status(id, key) { key = sourceKey(key); const target = this.$(id + '-status'); target.textContent = t(key); target.dataset.i18n = key;
+    if (id === 'preset' && this.$('quick-preset-status')) { this.$('quick-preset-status').textContent = t(key); this.$('quick-preset-status').dataset.i18n = key; }
+  }
   async operation(name, action) {
     if (this.busy.has(name)) return;
     const active = this.generation(); this.busy.add(name);
+    if (name === 'preset') this.syncPresetControls?.();
     try { await action(active); }
     catch (error) {
       if (active !== this.generation()) return;
       if (error.status === 401) throw error;
-      this.validation?.(error);
+      error.form = name; if (name === 'preset') error.presetNameControl = this.presetNameControl; this.validation?.(error);
       this.status(name, error.status === 404 && ['settings', 'pantry'].includes(name) ? 'This feature is unavailable on this server.' : errorMessage(error));
       if (error.status === 409) {
         if (name === 'settings') { this.settings = undefined; this.$('save-settings').disabled = true; }
         if (name === 'pantry') { this.stock = undefined; this.$('save-pantry').disabled = true; }
-        if (name === 'preset') { this.presetConflict = true; for (const id of ['update-preset', 'delete-preset']) this.$(id).disabled = true; }
+        if (name === 'preset' && this.presetMode !== 'create') { this.presetConflict = true; for (const id of ['update-preset', 'delete-preset']) this.$(id).disabled = true; }
       }
-    } finally { if (active === this.generation()) this.busy.delete(name); }
+    } finally { if (active === this.generation()) { this.busy.delete(name); if (name === 'preset') this.syncPresetControls?.(); } }
   }
   async load() {
     await Promise.all([this.loadPreferences(), this.loadStock(), this.loadPresets(), this.loadBindings()]);
@@ -66,6 +77,7 @@ export class AccountUI {
       this.settings = value;
       this.$('account-ui-language').value = value.ui_language ?? ''; this.$('account-recipe-language').value = value.recipe_language ?? '';
       this.$('recipe-language').value = value.recipe_language ?? this.capabilities().defaults?.language ?? 'en';
+      this.applyStorePreferences(value);
       language.account(value.ui_language); this.$('save-settings').disabled = false;
       this.status('settings', 'Loaded.'); this.relabel();
     });
@@ -76,14 +88,34 @@ export class AccountUI {
       this.status('settings', 'Saving…');
       const body = {expected_revision: this.settings.revision, ui_language: uiLanguage ?? (this.$('account-ui-language').value || null)};
       if (uiLanguage === undefined) body.recipe_language = this.$('account-recipe-language').value || null;
+      if (uiLanguage === undefined && Object.hasOwn(this.settings, 'retailer_ids')) {
+        body.retailer_ids = this.$('account-retailers').value.trim() ? this.$('account-retailers').value.split(',').map(id => id.trim()) : null;
+        body.max_stores = this.$('account-max-stores').value ? Number(this.$('account-max-stores').value) : null;
+      }
       const value = await this.api.saveSettings(body); if (active !== this.generation()) return;
       this.settings = value; this.$('account-ui-language').value = value.ui_language ?? '';
       if (uiLanguage === undefined) {
         if (value.ui_language) language.choose(value.ui_language); else language.resetChoice();
         language.account(value.ui_language); this.$('recipe-language').value = value.recipe_language ?? this.capabilities().defaults?.language ?? 'en';
+        this.applyStorePreferences(value);
       }
       this.status('settings', 'Saved.'); this.relabel();
     });
+  }
+  applyStorePreferences(value) {
+    if (!this.$('account-retailers')) return;
+    const supported = Object.hasOwn(value, 'retailer_ids');
+    this.$('account-retailers').disabled = this.$('account-max-stores').disabled = !supported;
+    this.$('account-retailers').value = (value.retailer_ids ?? []).join(', ');
+    this.$('account-max-stores').value = value.max_stores ?? '';
+    if (supported) {
+      const defaults = this.capabilities().shopping_defaults ?? {};
+      for (const id of ['recipe-retailers', 'offer-retailer']) {
+        this.$(id).value = (value.retailer_ids ?? defaults.retailer_ids ?? []).join(', '); this.$(id).dispatchEvent?.(new Event('input'));
+      }
+      this.$('max-stores').value = value.max_stores ?? defaults.max_stores ?? this.capabilities().recipe_request_schema?.properties?.max_stores?.default ?? 1;
+    }
+    this.$('account-retailers').dispatchEvent?.(new Event('input'));
   }
   syncLanguage(value) {
     this.pendingLanguage = value;
@@ -101,10 +133,13 @@ export class AccountUI {
       for (const [id, item] of Object.entries(value.items)) {
         const row = this.addPantry(); row.querySelector('select').value = id;
         row.querySelector('input').value = item.grams === null ? 'available' : `${item.grams}g`;
+        row.querySelector('input').dispatchEvent(new Event('input'));
       }
       if (!Object.keys(value.items).length) this.addPantry();
       for (const option of this.$('use-first').options ?? []) option.selected = value.items[option.value]?.use_first === true;
       this.$('use-first').dispatchEvent?.(new Event('change'));
+      this.setCondiments(value.condiments ?? []);
+      this.syncPantry?.();
       this.$('save-pantry').disabled = false; this.status('pantry', 'Loaded.');
     });
   }
@@ -116,37 +151,56 @@ export class AccountUI {
       const useFirst = [...this.$('use-first').selectedOptions].map(option => option.value);
       if (useFirst.some(id => !rows.some(row => row.ingredient === id))) throw new Error('Use-first ingredients must be in your pantry.');
       this.status('pantry', 'Saving…');
-      const value = await this.api.savePantry(pantryItems(rows, useFirst), this.stock.revision);
+      const value = await this.api.savePantry(pantryItems(rows, useFirst), this.stock.revision, this.capabilities().recipe_request_schema?.properties?.condiments ? this.getCondiments() : undefined);
       if (active !== this.generation()) return; this.stock = value; this.status('pantry', 'Saved.');
     });
   }
+  getCondiments() { return [...(this.$('condiment-options')?.querySelectorAll('input:checked') ?? [])].map(input => input.value); }
+  setCondiments(ids) { for (const input of this.$('condiment-options')?.querySelectorAll('input') ?? []) input.checked = ids.includes(input.value); }
   async loadPresets() {
     return this.operation('preset', async active => {
       const value = await this.api.presets(); if (active !== this.generation()) return;
-      this.presets = value.items ?? []; this.presetConflict = false; for (const id of ['update-preset', 'delete-preset']) this.$(id).disabled = false; this.renderPresets();
+      this.presets = value.items ?? []; this.presetConflict = false; this.renderPresets();
       if (!this.presets.length) this.status('preset', 'No saved presets.');
     });
   }
   selectedPreset() { return this.presets.find(item => String(item.id ?? item.preset_id) === this.$('preset-select').value); }
-  renderPresets() {
-    const selected = this.$('preset-select').value;
-    this.$('preset-select').replaceChildren(this.option('', 'Choose a preset'), ...this.presets.map(item => this.option(item.id ?? item.preset_id, item.name, true)));
-    this.$('preset-select').value = selected;
+  setPresetName(name) { this.suggestedPresetName = undefined; for (const id of ['preset-name', 'quick-preset-name']) if (this.$(id)) this.$(id).value = name; }
+  suggestPresetName(label) {
+    const input = this.$('quick-preset-name'); if (!input) return;
+    if (!input.value || input.value === this.suggestedPresetName) { this.setPresetName(label); this.suggestedPresetName = label; }
   }
-  async writePreset(mode) {
+  syncPresetControls() {
+    const selected = this.selectedPreset(), busy = this.busy?.has('preset');
+    for (const id of ['update-preset', 'delete-preset']) if (this.$(id)) this.$(id).disabled = busy || !selected || this.presetConflict;
+    if (this.$('apply-preset')) this.$('apply-preset').disabled = busy || !selected || selected.stale === true;
+    for (const id of ['create-preset', 'quick-save-preset', 'reload-presets']) if (this.$(id)) this.$(id).disabled = busy;
+  }
+  renderPresets(selected = this.$('preset-select').value) {
+    this.$('preset-select').replaceChildren(this.option('', 'Choose a preset'), ...this.presets.map(item => this.option(item.id ?? item.preset_id, item.name, true)));
+    this.$('preset-select').value = this.presets.some(item => String(item.id ?? item.preset_id) === selected) ? selected : '';
+    this.syncPresetControls();
+  }
+  async writePreset(mode, nameControl = 'preset-name') {
+    if (this.busy.has('preset')) return;
     if (this.presetConflict && mode !== 'create') return;
+    this.presetMode = mode; this.presetNameControl = nameControl;
     return this.operation('preset', async active => {
-      const selected = this.selectedPreset(), name = this.$('preset-name').value.trim();
+      const selected = this.selectedPreset(), enteredName = this.$(nameControl).value, name = enteredName.trim();
       if (mode !== 'create' && !selected) throw new Error('Choose a preset first.');
-      if (mode !== 'delete' && !name) throw new Error('Enter a preset name.');
+      if (mode !== 'delete' && !name) { const error = new Error('Enter a preset name.'); error.fields = [{loc: ['body', 'name']}]; throw error; }
       const id = selected?.id ?? selected?.preset_id;
       this.status('preset', 'Saving…');
+      let written;
       if (mode === 'delete') await this.api.deletePreset(id, selected.revision);
-      else if (mode === 'update') await this.api.updatePreset(id, name, this.recipe(false), selected.revision);
-      else await this.api.createPreset(name, this.recipe(false));
+      else if (mode === 'update') written = await this.api.updatePreset(id, name, this.recipe(false), selected.revision);
+      else written = await this.api.createPreset(name, this.recipe(false));
       if (active !== this.generation()) return;
       const value = await this.api.presets(); if (active !== this.generation()) return;
-      this.presets = value.items; this.renderPresets(); this.status('preset', mode === 'delete' ? 'Preset deleted.' : 'Saved.');
+      this.presets = value.items; this.renderPresets(mode === 'delete' ? '' : String(written?.id ?? written?.preset_id ?? id ?? ''));
+      this.suggestedPresetName = undefined;
+      if (this.$(nameControl).value === enteredName) this.setPresetName(mode === 'delete' ? '' : name);
+      this.status('preset', mode === 'delete' ? 'Preset deleted.' : 'Saved.');
     });
   }
   applyPreset() {
@@ -156,9 +210,10 @@ export class AccountUI {
   }
   applyParameters(parameters) {
     const caps = this.capabilities();
-    for (const [field, allowed] of [['provider', caps.providers], ['cache_policy', caps.cache_policies], ['meal_style', caps.meal_styles], ['language', caps.languages ?? ['cs', 'en']]]) {
+    for (const [field, allowed] of [['provider', caps.providers], ['cache_policy', caps.cache_policies], ['meal_style', caps.meal_styles], ['language', caps.languages ?? ['cs', 'en']], ['cuisine', caps.cuisine_ids ?? []]]) {
       if (parameters[field] != null && !allowed.includes(parameters[field])) throw new Error('This preset is no longer supported. Update or delete it before applying.');
     }
+    if (parameters.cuisine && parameters.provider === 'template') throw new Error('Cuisine requires a model provider.');
     for (const [field, allowed] of [['source_ids', caps.sources], ['exclusions', caps.ingredients], ['retailer_ids', caps.retailer_ids]]) {
       if (allowed?.length && parameters[field]?.some(value => !allowed.includes(value))) throw new Error('This preset is no longer supported. Update or delete it before applying.');
     }
@@ -182,6 +237,7 @@ export class AccountUI {
     this.$('recipe-profile').value = parameters.profile_fingerprint ?? parameters.profile_fingerprints?.[parameters.source_ids?.[0]] ?? '';
     for (const select of this.$('extra-source-profiles').querySelectorAll('select')) select.value = parameters.profile_fingerprints?.[select.dataset.source] ?? '';
     this.$('recipe-language').value = parameters.language ?? this.settings?.recipe_language ?? this.capabilities().defaults?.language ?? 'en';
+    if (this.$('recipe-count') && parameters.recipe_count == null) this.$('recipe-count').value = 3;
     this.status('preset', 'Preset applied.');
   }
   async loadBindings() {

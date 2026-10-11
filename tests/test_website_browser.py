@@ -494,8 +494,8 @@ def test_desktop_mobile_recipe_offers_reports_relogin_and_isolation(
                 secondary_profile.fingerprint
             )
             page.locator('.tabs a[href="#pantry"]').click()
-            page.locator("#pantry-rows select").select_option("rice")
-            page.locator("#pantry-rows input").fill("500g")
+            page.locator("#pantry-rows select").first.select_option("rice")
+            page.locator("#pantry-rows [data-pantry-amount]").fill("500")
             page.locator('.tabs a[href="#recipes"]').click()
             page.get_by_label("Budget per serving").fill("80.0000")
             page.get_by_role("button", name="Find my next meal").click()

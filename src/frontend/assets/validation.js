@@ -12,12 +12,18 @@ export function showValidation(error, document, t, reveal) {
   if (!Array.isArray(error.fields)) return;
   let first;
   for (const field of error.fields) {
-    const location = field.loc ?? [], key = [...location].reverse().find(value => Object.hasOwn(fieldControls, value));
+    const location = field.loc ?? [], key = [...location].reverse().find(value => Object.hasOwn(fieldControls, value) || ['recipe_count', 'condiments', 'cuisine'].includes(value));
     let target = key ? document.getElementById(fieldControls[key]) : undefined;
+    if (key === 'recipe_count') target = document.getElementById('recipe-count');
+    if (key === 'cuisine') target = document.getElementById('cuisine');
+    if (key === 'name' && error.presetNameControl) target = document.getElementById(error.presetNameControl);
+    if (key === 'condiments') target = document.getElementById('condiment-options')?.querySelector('input');
+    if (error.form === 'settings' && ['retailer_ids', 'max_stores'].includes(key)) target = document.getElementById(key === 'retailer_ids' ? 'account-retailers' : 'account-max-stores');
     if (location.includes('pantry') || location.includes('items')) {
       const id = location[location.indexOf(location.includes('pantry') ? 'pantry' : 'items') + 1];
       const rows = [...(document.getElementById('pantry-rows')?.children ?? [])];
-      const row = rows.find(row => row.querySelector('select')?.value === id) ?? rows[0]; target = row?.querySelector('input');
+      const row = rows.find(row => row.querySelector('select')?.value === id) ?? rows[0]; target = row?.querySelector('[data-pantry-amount]') ?? row?.querySelector('input');
+      if (target?.disabled) target = row?.querySelector('[data-pantry-unit]') ?? target;
     }
     if (!target) continue;
     if (target.getAttribute('aria-hidden') === 'true') target = document.getElementById(`${target.id}-search`) ?? document.getElementById(`${target.id}-choices-search`) ?? target;

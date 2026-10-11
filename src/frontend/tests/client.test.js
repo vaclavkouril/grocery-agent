@@ -12,6 +12,68 @@ import {clearValidation, showValidation} from '../assets/validation.js';
 const capabilities = {providers: ['template'], cache_policies: ['cache-only'], ingredients: ['rice', 'oil'], sources: ['kupi']};
 const form = {provider: 'template', model: '', cache_policy: 'cache-only', meal_style: 'main', servings: '2', max_stores: '1', budget: '12.3400', exclusions: []};
 
+test('individual recipe exports use private text transport, encoded provenance and explicit format/language', async () => {
+  const calls = [], body = '{"@type":"Recipe","recipeIngredient":["1000.001 g rice"]}';
+  const api = new GroceryClient(async (path, options) => { calls.push([path, options]); return new Response(body, {headers: {'Content-Type': 'application/ld+json'}}); });
+  api.setSession({token: 'private-token'});
+  assert.equal(await api.recipeExport('job/a?b', 2), body);
+  assert.equal(calls[0][0], '/v1/jobs/job%2Fa%3Fb/recipes/2/export?format=text&language=cs');
+  for (const format of ['text', 'ingredients', 'schema-org']) assert.equal(await api.recipeExport('original-job', 1, format, 'en'), body);
+  for (const [, request] of calls) {
+    assert.equal(request.method, 'GET'); assert.equal(request.headers.get('Authorization'), 'Bearer private-token');
+    assert.equal(request.credentials, 'omit'); assert.equal(request.cache, 'no-store'); assert.equal(request.body, undefined);
+  }
+  api.setSession({session_mode: 'cookie', csrf_token: 'secret'});
+  await api.recipeExport('original-job', 1, 'ingredients', 'en');
+  assert.equal(calls.at(-1)[1].credentials, 'same-origin'); assert.equal(calls.at(-1)[1].headers.has('Authorization'), false);
+  const denied = new GroceryClient(async () => new Response('{"detail":"Not found","code":"not-found"}', {status: 404}));
+  await assert.rejects(denied.recipeExport('foreign-job', 0), error => error.status === 404 && error.code === 'not-found');
+});
+
+test('explicit empty retailers override account defaults while omission remains legacy', () => {
+  assert.equal(Object.hasOwn(recipePayload(form, capabilities, []), 'retailer_ids'), false);
+  assert.deepEqual(recipePayload({...form, retailer_ids: []}, capabilities, []).retailer_ids, []);
+  assert.deepEqual(recipePayload({...form, retailer_ids: ['billa']}, capabilities, []).retailer_ids, ['billa']);
+  for (const retailer_ids of [['billa', 'billa'], ['invalid store']]) assert.throws(() => recipePayload({...form, retailer_ids}, capabilities, []));
+});
+
+test('cuisine requests preserve canonical style and reject template/unknown combinations', () => {
+  const cuisine_ids = ['greek', 'chinese', 'vietnamese', 'indian', 'mexican', 'italian', 'thai', 'japanese', 'korean', 'french', 'spanish', 'mediterranean', 'czech', 'middle_eastern'];
+  const caps = {...capabilities, providers: ['codex', 'template'], cuisine_ids};
+  for (const cuisine of cuisine_ids) assert.equal(recipePayload({...form, provider: 'codex', cuisine}, caps, []).cuisine, cuisine);
+  assert.equal(Object.hasOwn(recipePayload(form, caps, []), 'cuisine'), false);
+  assert.equal(recipePayload({...form, cuisine: null}, caps, []).cuisine, null);
+  assert.throws(() => recipePayload({...form, cuisine: 'greek'}, caps, []), /model provider/);
+  assert.throws(() => recipePayload({...form, provider: 'codex', cuisine: 'unknown'}, caps, []), /supported cuisine/);
+});
+
+test('batch bounds and explicit condiment inventory preserve legacy omission', () => {
+  assert.equal(Object.hasOwn(recipePayload(form, capabilities, []), 'recipe_count'), false);
+  assert.equal(Object.hasOwn(recipePayload(form, capabilities, []), 'condiments'), false);
+  for (const count of [1, 3, 6]) {
+    const value = recipePayload({...form, recipe_count: String(count), condiments: []}, capabilities, []);
+    assert.equal(value.recipe_count, count); assert.deepEqual(value.condiments, []);
+  }
+  for (const count of [0, 7, 2.5, 'invalid']) assert.throws(() => recipePayload({...form, recipe_count: count}, capabilities, []));
+  assert.deepEqual(recipePayload({...form, condiments: ['salt', 'garlic_powder']}, capabilities, []).condiments, ['salt', 'garlic_powder']);
+  for (const condiments of [['oil'], ['salt', 'salt'], null]) assert.throws(() => recipePayload({...form, condiments}, capabilities, []));
+});
+
+test('saved recipe methods retain individual meal provenance, scoped IDs and CSRF', async () => {
+  const calls = [], api = new GroceryClient(async (path, options) => {
+    calls.push([path, options]); return options.method === 'DELETE' ? new Response(null, {status: 204}) : new Response('{}');
+  });
+  api.setSession({session_mode: 'cookie', csrf_token: 'private-csrf'});
+  await api.savedRecipes(10, 10); await api.saveRecipe('job-1', 2); await api.savedRecipe('a/b'); await api.removeSavedRecipe('a/b');
+  assert.equal(calls[0][0], '/v1/me/saved-recipes?offset=10&limit=10');
+  assert.deepEqual(JSON.parse(calls[1][1].body), {job_id: 'job-1', meal_index: 2});
+  assert.equal(calls[2][0], '/v1/me/saved-recipes/a%2Fb');
+  assert.equal(calls[3][1].method, 'DELETE');
+  for (const index of [1, 3]) { assert.equal(calls[index][1].headers.get('X-CSRF-Token'), 'private-csrf'); assert.equal(calls[index][1].headers.get('Authorization'), null); }
+  await api.savePantry({}, 7, []);
+  assert.deepEqual(JSON.parse(calls[4][1].body), {items: {}, expected_revision: 7, condiments: []});
+});
+
 test('registration sends only credentials and selected session mode, keeps bearer session in memory', async () => {
   const calls = [];
   const client = new GroceryClient(async (path, options) => {
@@ -70,7 +132,7 @@ test('registration network errors clear session state too', async () => {
 });
 
 // Run the actual browser event handlers against a small DOM stand-in; no external services.
-async function browserApp(auth = {registration: true, password_login: true}, registerResponse, responses = {}) {
+async function browserApp(auth = {registration: true, password_login: true}, registerResponse, responses = {}, capabilityOverrides = {}) {
   const [source, html] = await Promise.all([
     readFile(new URL('../assets/app.js', import.meta.url), 'utf8'),
     readFile(new URL('../index.html', import.meta.url), 'utf8'),
@@ -97,7 +159,7 @@ async function browserApp(auth = {registration: true, password_login: true}, reg
       replaceChildren(...children) { this.children = children; if (children[0]?.value !== undefined) this.value = children[0].value; },
       append(...children) { this.children.push(...children); },
       after(item) { this.following = item; },
-      closest() { return null; }, reset() {}, querySelectorAll() { return []; }, remove() {},
+      closest(selector) { return selector === '#signin-panel' && /^(auth-|login-|register-|invite-|session-token|signin-form|password-form)/.test(id) ? elements.get('signin-panel') : null; }, reset() {}, querySelectorAll() { return []; }, remove() {},
       focus() { document.activeElement = this; },
       get selectedOptions() { return this.children.filter(child => child.value === this.value); },
       get childNodes() { return this.children; },
@@ -127,7 +189,7 @@ async function browserApp(auth = {registration: true, password_login: true}, reg
     elements.get(id).submitButton = button;
   }
   const calls = [], windowListeners = {};
-  const supported = {...capabilities, ingredient_labels: {}, models: {}, meal_styles: ['main'], default_provider: 'template', default_cache_policy: 'cache-only', recipe_request_schema: {properties: {servings: {minimum: 1, maximum: 20, default: 2}, max_stores: {minimum: 1, maximum: 3, default: 1}}}, offer_query_schema: {$defs: {Unit: {enum: ['kg']}}}};
+  const supported = {...capabilities, ingredient_labels: {}, models: {}, meal_styles: ['main'], default_provider: 'template', default_cache_policy: 'cache-only', recipe_request_schema: {properties: {servings: {minimum: 1, maximum: 20, default: 2}, max_stores: {minimum: 1, maximum: 3, default: 1}}}, offer_query_schema: {$defs: {Unit: {enum: ['kg']}}}, ...capabilityOverrides};
   const fetcher = async (path, options) => {
     calls.push([path, options]);
     if (Object.hasOwn(responses, path)) return typeof responses[path] === 'function' ? responses[path](path, options) : new Response(JSON.stringify(responses[path]));
@@ -149,6 +211,27 @@ async function browserApp(auth = {registration: true, password_login: true}, reg
   await settle();
   return {get: id => elements.get(id), document, calls, client, settle, tokenAccess, pagehide: () => windowListeners.pagehide()};
 }
+
+for (const [defaultModel, expected] of [['gpt-6-luna', 'gpt-6-luna'], ['unadvertised-model', 'gpt-6.1-sol']]) test(`visible models use advertised default or first (${defaultModel}) and retain explicit choices`, async () => {
+  const models = {codex: ['gpt-6.1-sol', 'gpt-6-luna'], ollama: Array.from({length: 10}, (_, index) => `experimental-local-${index}`)};
+  const app = await browserApp({password_login: false}, undefined, {}, {providers: ['codex', 'ollama', 'template'], default_provider: 'codex', models, defaults: {model: defaultModel}});
+  app.get('session-token').value = 'token'; app.get('signin-form').dispatch('submit'); await app.settle();
+  assert.equal(app.get('model').value, expected);
+  assert.deepEqual(app.get('model').children.map(option => option.value), models.codex);
+  app.get('model').value = 'gpt-6-luna'; app.get('provider').dispatch('change');
+  assert.equal(app.get('model').value, 'gpt-6-luna');
+  app.get('ui-language').value = 'cs'; app.get('ui-language').dispatch('change');
+  assert.equal(app.get('model').value, 'gpt-6-luna');
+  app.get('provider').value = 'ollama'; app.get('provider').dispatch('change');
+  assert.deepEqual(app.get('model').children.map(option => option.value), models.ollama);
+  app.get('model').value = 'experimental-local-9'; app.get('provider').dispatch('change');
+  assert.equal(app.get('model').value, 'experimental-local-9');
+  app.get('provider').value = 'codex'; app.get('provider').dispatch('change');
+  assert.equal(app.get('model').value, 'gpt-6-luna');
+  app.get('provider').value = 'ollama'; app.get('provider').dispatch('change');
+  assert.equal(app.get('model').value, 'experimental-local-9');
+  app.pagehide();
+});
 
 for (const registration of [false, undefined, 'true']) test(`registration tabs require explicit permission (${registration})`, async () => {
   const app = await browserApp({registration, password_login: false});
@@ -258,6 +341,48 @@ test('registration activates session, clears credentials and shows a useful empt
   assert.equal(app.get('register-password').value, ''); assert.equal(app.client.token, '');
 });
 
+test('quick preset save guards duplicate writes and auto-selects the created preset', async () => {
+  let finishCreate, created;
+  const app = await browserApp(undefined, undefined, {
+    '/v1/me/presets': (_, options) => options.method === 'POST'
+      ? new Promise(resolve => { finishCreate = resolve; })
+      : new Response(JSON.stringify({items: created ? [created] : []})),
+  });
+  app.get('register-password').value = app.get('register-password-confirm').value = 'fixture private password';
+  app.get('register-form').dispatch('submit'); await app.settle();
+  assert.equal(app.get('update-preset').disabled, true); assert.equal(app.get('delete-preset').disabled, true);
+  app.get('quick-preset-name').value = 'My dinner'; app.get('quick-preset-name').dispatch('input');
+  app.get('quick-preset-name').dispatch('keydown', {key: 'Enter'}); app.get('quick-save-preset').dispatch('click'); app.get('create-preset').dispatch('click');
+  assert.equal(app.calls.filter(([path, options]) => path === '/v1/me/presets' && options.method === 'POST').length, 1);
+  assert.equal(app.get('quick-save-preset').disabled, true);
+  app.get('quick-preset-name').value = 'Next dinner'; app.get('quick-preset-name').dispatch('input');
+  created = {id: 'new-preset', name: 'My dinner', parameters: {provider: 'template'}, revision: 0};
+  finishCreate(new Response(JSON.stringify(created))); await app.settle();
+  assert.equal(app.get('preset-select').value, 'new-preset'); assert.equal(app.get('quick-preset-status').textContent, 'Saved.');
+  assert.equal(app.get('update-preset').disabled, false); assert.equal(app.get('delete-preset').disabled, false);
+  assert.equal(app.get('quick-save-preset').disabled, false);
+  assert.equal(app.get('quick-preset-name').value, 'Next dinner'); assert.equal(app.get('preset-name').value, 'Next dinner');
+  assert.equal(app.calls.some(([path]) => path === '/v1/recipes'), false);
+});
+
+for (const target of ['workspace navigation', 'header language']) test(`late authentication completion preserves focus on ${target}`, async () => {
+  let finishCollections;
+  const app = await browserApp(undefined, undefined, {
+    '/v1/collections?source=kupi': () => new Promise(resolve => { finishCollections = resolve; }),
+  });
+  app.get('auth-register-tab').dispatch('click');
+  app.get('register-password').value = app.get('register-password-confirm').value = 'fixture private password';
+  app.get('register-form').dispatch('submit'); await app.settle();
+  assert.equal(app.get('workspace').hidden, false);
+  assert.equal(typeof finishCollections, 'function');
+  assert.equal(app.get('register-form').getAttribute('aria-busy'), 'true');
+  const focused = target === 'workspace navigation' ? app.document.createElement('a') : app.get('ui-language');
+  focused.setAttribute('href', '#offers'); focused.focus();
+  finishCollections(new Response('[]')); await app.settle();
+  assert.equal(app.get('register-form').getAttribute('aria-busy'), null);
+  assert.equal(app.document.activeElement, focused);
+});
+
 test('cookie registration suppresses expected resume 401 and activates CSRF session without bearer headers', async () => {
   const app = await browserApp({registration: true, password_login: true, cookie_sessions: true},
     () => new Response(JSON.stringify({session_mode: 'cookie', csrf_token: 'new-csrf'})),
@@ -315,6 +440,25 @@ test('token and invitation sign-in remain available when password auth and regis
   assert.equal(app.client.token, 'invitation-session');
   assert.equal(app.get('invite-token').value, ''); assert.equal(app.get('invite-password').value, '');
   assert.equal(app.get('auth-tabs').hidden, true);
+});
+
+for (const formats of [undefined, ['unknown'], ['ingredients'], ['text', 'ingredients', 'schema-org']]) test(`recipe export controls require advertised formats (${formats})`, async () => {
+  const job = {job_id: 'original-job', kind: 'recipe', status: 'succeeded', phase: 'complete', created_at: '2026-10-01'};
+  const meal = {title: '<hostile title>', minutes: 15, servings: 2, stores: [], usage_cost_per_serving_czk: '1.0001', nutrients_per_serving: {protein_g: '2.0001', kcal: '3'}, lines: [], steps: []};
+  const app = await browserApp({password_login: false}, undefined, {
+    '/v1/jobs?offset=0&limit=10': {items: [job], total: 1, offset: 0, limit: 10},
+    '/v1/jobs/original-job': job,
+    '/v1/jobs/original-job/result': {status: 'success', report: {batch_finished_at: '2026-10-01', meals: [meal]}},
+  }, {recipe_export_formats: formats});
+  app.get('session-token').value = 'token'; app.get('signin-form').dispatch('submit'); await app.settle();
+  app.get('job-list').children[0].children[1].dispatch('click'); await app.settle();
+  const card = app.get('result').children.find(child => child.className === 'recipe-card');
+  assert.ok(card);
+  const disclosure = card.children.find(child => child.className === 'recipe-export');
+  const supported = formats?.filter(format => ['text', 'ingredients', 'schema-org'].includes(format)) ?? [];
+  assert.equal(Boolean(disclosure), supported.length > 0);
+  if (disclosure) assert.deepEqual(disclosure.children[1].children[0].children[1].children.map(option => option.value), supported);
+  app.pagehide();
 });
 
 test('pending jobs explain the wait and keep result downloads hidden', async () => {

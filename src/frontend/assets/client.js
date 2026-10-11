@@ -37,12 +37,17 @@ export class GroceryClient {
   job(id) { return this.request(`/v1/jobs/${encodeURIComponent(id)}`); }
   result(id) { return this.request(`/v1/jobs/${encodeURIComponent(id)}/result`); }
   report(id) { return this.request(`/v1/jobs/${encodeURIComponent(id)}/report`, {text: true}); }
+  recipeExport(job_id, meal_index, format = 'text', language = 'cs') { return this.request(`/v1/jobs/${encodeURIComponent(job_id)}/recipes/${encodeURIComponent(meal_index)}/export?${new URLSearchParams({format, language})}`, {text: true}); }
   cancel(id) { return this.request(`/v1/jobs/${encodeURIComponent(id)}`, {method: 'DELETE'}); }
   logout() { return this.request('/v1/session', {method: 'DELETE'}); }
   settings() { return this.request('/v1/me/settings'); }
   saveSettings(body) { return this.request('/v1/me/settings', {method: 'PATCH', body}); }
   pantry() { return this.request('/v1/me/pantry'); }
-  savePantry(items, expected_revision) { return this.request('/v1/me/pantry', {method: 'PUT', body: {items, expected_revision}}); }
+  savePantry(items, expected_revision, condiments) { return this.request('/v1/me/pantry', {method: 'PUT', body: {items, expected_revision, ...(condiments === undefined ? {} : {condiments})}}); }
+  savedRecipes(offset = 0, limit = 10) { return this.request(`/v1/me/saved-recipes?${new URLSearchParams({offset, limit})}`); }
+  saveRecipe(job_id, meal_index) { return this.request('/v1/me/saved-recipes', {method: 'POST', body: {job_id, meal_index}}); }
+  savedRecipe(id) { return this.request(`/v1/me/saved-recipes/${encodeURIComponent(id)}`); }
+  removeSavedRecipe(id) { return this.request(`/v1/me/saved-recipes/${encodeURIComponent(id)}`, {method: 'DELETE'}); }
   presets() { return this.request('/v1/me/presets'); }
   createPreset(name, parameters) { return this.request('/v1/me/presets', {method: 'POST', body: {name, parameters: presetParameters(parameters)}}); }
   updatePreset(id, name, parameters, expected_revision) { return this.request(`/v1/me/presets/${encodeURIComponent(id)}`, {method: 'PATCH', body: {name, parameters: presetParameters(parameters), expected_revision}}); }
@@ -61,8 +66,10 @@ export class GroceryClient {
 }
 
 export function decimal(value) { return String(value).trim().replace(',', '.'); }
+export const condimentIds = ['salt', 'black_pepper', 'paprika', 'dried_herbs', 'cumin', 'chilli', 'garlic_powder'];
+export const cuisineIds = ['greek', 'chinese', 'vietnamese', 'indian', 'mexican', 'italian', 'thai', 'japanese', 'korean', 'french', 'spanish', 'mediterranean', 'czech', 'middle_eastern'];
 export function presetParameters(request) {
-  const {pantry, use_first, request_id, ...parameters} = request;
+  const {pantry, use_first, condiments, request_id, ...parameters} = request;
   return parameters;
 }
 export function pantryItems(rows, useFirst = []) {
@@ -109,6 +116,20 @@ export function recipePayload(form, capabilities, pantryRows) {
     payload.profile_fingerprints = form.profile_fingerprints;
   }
   if (form.model) payload.model = form.model;
+  if (form.cuisine !== undefined) {
+    if (form.cuisine != null && !(capabilities.cuisine_ids ?? cuisineIds).includes(form.cuisine)) throw new Error('Choose a supported cuisine.');
+    if (form.cuisine && form.provider === 'template') throw new Error('Cuisine requires a model provider.');
+    payload.cuisine = form.cuisine;
+  }
+  if (form.recipe_count != null) {
+    const count = Number(form.recipe_count);
+    if (!Number.isInteger(count) || count < 1 || count > 6) throw new Error('Choose 1–6 recipes.');
+    payload.recipe_count = count;
+  }
+  if (form.condiments !== undefined) {
+    if (!Array.isArray(form.condiments) || new Set(form.condiments).size !== form.condiments.length || form.condiments.some(id => !condimentIds.includes(id))) throw new Error('Choose known condiments.');
+    payload.condiments = [...form.condiments];
+  }
   for (const [field, value, positive] of [['min_protein_g', form.min_protein_g, false], ['max_kcal', form.max_kcal, true]]) {
     if (value === undefined || value === '') continue;
     if (!/^\d+(?:\.\d+)?$/.test(value) || (positive && /^0+(?:\.0+)?$/.test(value))) throw new Error('Nutrition limits must be valid decimal amounts.');
@@ -119,7 +140,7 @@ export function recipePayload(form, capabilities, pantryRows) {
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > 480) throw new Error('Cooking time must be 1–480 minutes.');
     payload.max_minutes = minutes;
   }
-  if (form.retailer_ids?.length) {
+  if (Array.isArray(form.retailer_ids)) {
     if (new Set(form.retailer_ids).size !== form.retailer_ids.length || form.retailer_ids.some(id => !/^[a-z][a-z0-9_-]{0,63}$/.test(id))) throw new Error('Use unique valid retailer IDs.');
     payload.retailer_ids = form.retailer_ids;
   }

@@ -17,6 +17,7 @@ PANELS = (
     ("recipes", "recipe-screen", "Recipes", "Recepty"),
     ("pantry", "pantry", "Pantry", "Spíž"),
     ("offers", "offers", "Grocery offers", "Nabídky potravin"),
+    ("bookmarks", "bookmarks", "Bookmarks", "Záložky"),
     ("jobs", "jobs", "History", "Historie"),
     ("account-settings", "account-settings", "Account", "Účet"),
 )
@@ -179,7 +180,7 @@ def test_bilingual_accessibility_reflow_keyboard_and_reduced_motion(
                 name=("Pracovní prostor" if language == "cs" else "Workspace"),
                 exact=True,
             )
-            assert nav.get_by_role("link").count() == 5
+            assert nav.get_by_role("link").count() == len(PANELS)
             for route, panel_id, english, czech in PANELS:
                 link = nav.get_by_role(
                     "link", name=czech if language == "cs" else english, exact=True

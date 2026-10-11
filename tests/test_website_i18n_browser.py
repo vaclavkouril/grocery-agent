@@ -103,8 +103,9 @@ def test_bilingual_account_pantry_presets_validation_offers_history(
             assert page.locator("#exclusions").get_attribute("tabindex") == "-1"
 
             navigate(page, "pantry")
-            page.locator("#pantry-rows select").select_option("rice")
-            page.locator("#pantry-rows input").fill("1,000001kg")
+            page.locator("#pantry-rows select").first.select_option("rice")
+            page.locator("#pantry-rows [data-pantry-amount]").fill("1,000001")
+            page.locator("#pantry-rows [data-pantry-unit]").select_option("kg")
             page.locator("#use-first").select_option(["rice"])
             with page.expect_response(
                 lambda response: (
@@ -126,21 +127,25 @@ def test_bilingual_account_pantry_presets_validation_offers_history(
                     "items": {"rice": {"grams": "600", "use_first": True}},
                 },
             ).ok
-            page.locator("#pantry-rows input").fill("500g")
+            page.locator("#pantry-rows [data-pantry-unit]").select_option("g")
+            page.locator("#pantry-rows [data-pantry-amount]").fill("500")
             page.locator("#save-pantry").click()
             playwright.expect(page.locator("#pantry-status")).to_contain_text(
                 "jiné relaci" if cs else "another session"
             )
-            assert page.locator("#pantry-rows input").input_value() == "500g"
+            assert page.locator("#pantry-rows [data-pantry-amount]").input_value() == "500"
             playwright.expect(page.locator("#save-pantry")).to_be_disabled()
             page.locator("#reload-pantry").click()
-            playwright.expect(page.locator("#pantry-rows input")).to_have_value("600g")
+            playwright.expect(page.locator("#pantry-rows [data-pantry-amount]")).to_have_value(
+                "600"
+            )
 
             navigate(page, "recipes")
             page.locator("#budget").fill("80,0000")
             page.locator("#recipe-language").select_option("cs")
-            page.locator("#have-seasonings").evaluate("el => el.closest('details').open = true")
-            page.locator("#have-seasonings").select_option("false")
+            # Named condiments are inventory, not reusable recipe preferences.
+            navigate(page, "pantry")
+            page.locator("#condiment-salt").check()
             navigate(page, "account-settings")
             page.locator("#preset-name").fill("Sign out")
             with page.expect_response(
@@ -151,8 +156,10 @@ def test_bilingual_account_pantry_presets_validation_offers_history(
             ) as created:
                 page.locator("#create-preset").click()
             preset = created.value.json()
-            assert not {"pantry", "use_first", "request_id"} & preset["parameters"].keys()
-            assert preset["parameters"]["seasonings_available"] is False
+            assert (
+                not {"pantry", "use_first", "request_id", "condiments"}
+                & preset["parameters"].keys()
+            )
             assert preset["parameters"]["max_cost_per_serving_czk"] == "80.0000"
             playwright.expect(
                 page.locator(f'#preset-select option[value="{preset["id"]}"]')
@@ -207,7 +214,7 @@ def test_bilingual_account_pantry_presets_validation_offers_history(
                 page.locator("#generate").click()
             assert submitted.value.status == 202
             request = submitted.value.request.post_data_json
-            assert request["language"] == "cs" and request["seasonings_available"] is False
+            assert request["language"] == "cs" and request["condiments"] == ["salt"]
             job_id = submitted.value.json()["job_id"]
             playwright.expect(page.locator("#request-summary")).to_be_visible()
             settings = Settings(
@@ -272,7 +279,9 @@ def test_bilingual_account_pantry_presets_validation_offers_history(
             page.reload()
             playwright.expect(page.locator("#workspace")).to_be_visible()
             navigate(page, "pantry")
-            playwright.expect(page.locator("#pantry-rows input")).to_have_value("600g")
+            playwright.expect(page.locator("#pantry-rows [data-pantry-amount]")).to_have_value(
+                "600"
+            )
             page.locator("#signout").click()
             playwright.expect(page.locator("#signin-panel")).to_be_visible()
             assert page.locator("#pantry-rows").inner_text() == ""
