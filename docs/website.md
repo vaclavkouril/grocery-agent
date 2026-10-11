@@ -14,12 +14,21 @@ request bounds from `/v1/capabilities`. Choose pantry amounts in g/kg or `availa
 servings, usage-cost budget and maximum stores. Submit a recipe request, follow progress, cancel
 unfinished work, and download the private JSON/HTML report. Offers include observed prices,
 retailer/source provenance and freshness warnings. Recent jobs are paginated and owner-only.
+Individual cards also provide [nutrition-app exports](recipe-export.md): manual-entry text
+for Kalorické tabulky, ingredients-only paste import and schema.org Recipe JSON. Quantities
+are edible raw grams for all servings; the original saved recipe is not changed.
+Provider and model selection are visible in the recipe parameters. Local choices include
+experimental models with poor benchmark results; selecting one is intentional, not a fallback.
+Codex offers only `gpt-6.1-sol` and `gpt-6-luna`, both previously recipe-benchmarked, with
+low reasoning effort. The selected model is saved with presets and each generated job.
+See the [model comparison](model-benchmark-round-two.md) before choosing; the small benchmark
+is not a promise of recipe quality, current availability or weekly usage costs.
 Administrators additionally see invitation creation and configured source/profile refresh controls.
 Optional nutrition, cooking-time, retailer/loyalty and pantry-priority controls follow the request schema.
 
 The interface uses a responsive cream/forest/apricot theme, system fonts and a local SVG illustration;
 it needs no design-service connection, CDN or frontend framework. Meal and pantry controls are
-the primary workflow; technical provider, nutrition and grocery-profile choices use disclosures.
+the primary workflow; nutrition and grocery-profile choices use disclosures.
 Keyboard navigation includes a skip link, account-tab arrow keys, visible focus and a scrollable
 offers region. Touch controls are at least 44px high and reduced-motion preferences are respected.
 Sign-up includes password confirmation and inline errors; busy controls prevent repeated submissions.
@@ -35,14 +44,37 @@ written to local/session storage. Account language settings synchronize across s
 Recipe language is a separate choice and is sent explicitly with new requests. Existing titles,
 user content, merchant names and immutable reports are not rewritten when switching the UI.
 
-The workspace separates Recipes, Pantry, Grocery offers, History and Account; administrators
+The workspace separates Recipes, Pantry, Grocery offers, History, Saved recipes and Account; administrators
 also see operational refresh and invitation controls. Advanced recipe settings expose ingredients,
 nutrition, shopping, generation and grocery data. Server-only currency, location, timezone,
 lactose restrictions, ranking, data age and provider limits are displayed rather than editable.
 Decimal inputs accept Czech commas or English dots and are sent as exact decimal strings.
 Seasoning availability does not imply oil: add oil as a pantry ingredient when owned.
 
-Save reusable recipe preferences as named presets in Account. Presets exclude pantry stock,
+Pantry entry supports ingredient search, quick additions, explicit amounts and units, or an
+“enough available” choice. Edit, prioritize or remove rows and save explicitly. Named condiment
+checkboxes make the available spices visible separately from weighed ingredients and oil.
+Account shopping preferences support several retailers and a maximum of 1–3 shopping contexts;
+they initialize recipe and offer controls without overriding explicit request choices.
+
+New website requests ask for three recipe alternatives by default; choose 1–6 before submitting.
+Provider usage scales with the count, and each candidate can require a repair call. Partial
+failures and duplicate omissions are visible. Each recipe can be bookmarked for later, while
+History retains every original request and report. Saved recipes reopen those original results
+without calling a model; unbookmarking does not delete history. Purchased ingredients link to
+the actual offer source, where available. Owned-only ingredients have no invented shopping link.
+
+Choose a cuisine from Recipes: Greek, Chinese, Vietnamese, Indian, Mexican, Italian, Thai,
+Japanese, Korean, French, Spanish, Mediterranean, Czech or Middle Eastern. Cuisine presets
+change only that preference; they keep your budget, nutrition constraints, stores and stock.
+They do not generate recipes automatically. Choose Codex or a configured Ollama model to
+generate cuisine-inspired recipes; fixed templates cannot adapt to a chosen cuisine.
+The model must use eligible ingredients and your selected condiments, so local adaptations
+may differ from traditional recipes. A cuisine is not an allergy or dietary guarantee.
+
+Save the current recipe preferences directly in Recipes with an editable preset name.
+The saved preset is selected for reuse immediately. Account retains the full preset editor
+for renaming, updating or deleting selected presets. Presets exclude pantry stock, condiments,
 use-first choices and request IDs. History can reuse an owned request with a fresh request ID;
 review the current constraints before submitting. Revision conflicts preserve local edits and
 ask you to reload instead of silently overwriting another session. Email and SimpleX connections
@@ -52,16 +84,17 @@ use the existing verified-binding flow and remain unavailable when disabled on t
 
 | Area | API parameters |
 | --- | --- |
-| Main meal choices | `meal_style`, `servings`, `max_cost_per_serving_czk`, `max_stores`, `language` |
-| Ingredients / pantry | `pantry`, `use_first`, `exclusions`, `seasonings_available` |
+| Main meal choices | `meal_style`, `cuisine`, `servings`, `max_cost_per_serving_czk`, `max_stores`, `language` |
+| Ingredients / pantry | `pantry`, `use_first`, `exclusions`, `condiments`; legacy `seasonings_available` |
 | Nutrition / cooking | `min_protein_g`, `max_kcal`, `max_minutes` |
 | Shopping | `retailer_ids`, `allow_loyalty` |
-| Generation | `provider`, `model` |
+| Generation | `provider`, `model`, `recipe_count` |
 | Grocery data | `cache_policy`, `source_ids`, single-source `profile_fingerprint` or per-source `profile_fingerprints` |
 | Internal identity | `request_id` / submission idempotency key; fresh for a reused request |
 
-Blank optional overrides inherit server settings; loyalty and seasonings have explicit
-inherit/yes/no choices. Models, sources, cache policies and overrides remain server-bounded.
+Blank optional overrides inherit server settings; loyalty has inherit/yes/no choices.
+The condiment inventory is explicit; legacy clients can still send `seasonings_available`.
+Models, sources, cache policies and overrides remain server-bounded.
 The app never quietly switches a provider or relaxes nutrition, cost or shopping limits.
 No-feasible results are distinct from provider failures. Only ingredients with configured
 nutrition are eligible; lactose policy is not a guarantee about every allergen or dietary rule.
@@ -138,7 +171,8 @@ placed in report links and redirects are not followed. API contracts are at `/op
 .venv/bin/pytest -q
 npm --prefix src/frontend test
 .venv/bin/pytest -q -m browser tests/test_website_browser.py \
-  tests/test_website_i18n_browser.py tests/test_website_accessibility_browser.py
+  tests/test_website_i18n_browser.py tests/test_website_accessibility_browser.py \
+  tests/test_recipe_workspace_browser.py tests/test_cuisine_presets_browser.py
 ```
 
 The browser check needs Python Playwright and system Chromium. It uses a temporary loopback

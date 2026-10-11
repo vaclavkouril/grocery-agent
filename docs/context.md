@@ -1,6 +1,6 @@
 # Compact project context
 
-Updated 2026-10-02. Resume here, then read the linked subsystem documentation.
+Updated 2026-10-11. Resume here, then read the linked subsystem documentation.
 Check the dirty worktree before editing; previous waves are intentionally uncommitted.
 
 ## Intent and boundaries
@@ -10,6 +10,11 @@ library, not application entrypoints. Local CLI needs no account. Backend is inv
 optional self-registration requires both password login and registration to be explicitly enabled.
 New recipes default to Codex; existing meal commands retain fixed templates. Ingredients must have
 known configured nutrition. Decimal is used for prices, quantities, macros and pantry arithmetic.
+The website exposes provider/model selection directly. Backend Codex choices are restricted to
+recipe-benchmarked `gpt-6.1-sol` and `gpt-6-luna`, using low reasoning; omitted model requests
+pin the first configured allowed ID instead of the CLI default. All ten benchmarked local models
+are enabled in the sample backend configuration, including weaker experiments. Ollama must run
+on the worker host; no model downloads or service activation are automatic.
 Email and SimpleX stay disabled until explicitly configured. No services, real account integrations,
 production migrations or live model/retailer acceptance runs were activated by this implementation.
 
@@ -32,14 +37,20 @@ production migrations or live model/retailer acceptance runs were activated by t
   `grocery-scrape` runs once; `grocery-collect` runs once or schedules 02:00 Europe/Prague by default.
 - [Recipe service](recipe-service.md): local-first/cache-only/refresh/no-cache, pinned combined sources,
   shopping-context limits, quote provenance, bounded model contexts, one validation repair, deterministic
-  evaluation and immutable reports. CLI/API/text/browser share request parameters.
+  evaluation and immutable reports. Optional batches generate 1–6 alternatives from one pinned snapshot,
+  with explicit partial failures. CLI/API/text/browser share request parameters and named condiments.
+  Optional cuisine preferences guide model recipes and are pinned with their requests.
 - [Backend](backend.md): durable owner-scoped jobs, leases/recovery, quotas/idempotency, pinned inputs,
   invitations, bearer sessions, optional password login and secure cookie/CSRF sessions.
   Administrator source/profile refreshes are coalesced and cooldown-limited without exposing other users.
 - [Website](website.md): capability-driven pantry/recipe forms, offers, progress/history/private reports,
   invitation/password/token login and optional cookie resume. Shared synchronous/asynchronous HTTP client.
   Czech/English interface and independently selected recipe language; revision-safe saved pantry,
-  preferences and presets. Recipes never deduct stock, and UI language switches never regenerate reports.
+  preferences and presets, multi-store account defaults, individual recipe bookmarks and actual offer links.
+  Built-in cuisine styles and quick preset saving are available directly from Recipes.
+  [Recipe exports](recipe-export.md) provide Czech/English manual-entry text, ingredient paste
+  lists and schema.org Recipe JSON from immutable saved meals, with private owner-scoped API access.
+  Recipes never deduct stock, and UI language switches never regenerate reports.
 - [Channels](channels.md), [email](email.md), [SimpleX](simplex.md): separately configured transports,
   proof-of-control binding, command confirmation, deduplicated intake and leased outbox retries.
 - [Configuration](configuration.md): defaults → shared TOML → app TOML → environment → explicit options.
@@ -47,7 +58,7 @@ production migrations or live model/retailer acceptance runs were activated by t
 
 ## Storage and compatibility
 
-Migration heads: offers `offers_0003`, control `control_0005`. Old collections retain legacy unknown
+Migration heads: offers `offers_0003`, control `control_0006`. Old collections retain legacy unknown
 coverage, not guessed profiles. Control migrations preserve users, sessions, jobs and channel state.
 Startup requires current schemas; migrations are explicit. Back up both DBs and evidence/report files.
 Old commands/catalogue endpoints/template recipes remain compatible. Library code never imports apps.
@@ -61,8 +72,8 @@ are not guaranteed checkout quantities, and recipe costs are consumed-ingredient
 Exact GTIN matching is supported; fuzzy identity and checkout ordering are outside this task.
 
 Run offline pytest, Ruff, mypy and `npm test --prefix src/frontend`; browser fixtures require Chromium.
-Current bilingual integration: 1,103 offline Python tests, 13 fixture-browser tests and 58 Node
-tests passed. Ruff lint/format and mypy (132 source files) passed. The built wheel was checked for
+Current integration: 1,448 offline Python tests, 21 fixture-browser tests and 74 Node
+tests passed. Ruff lint/format and mypy (137 source files) passed. The built wheel was checked for
 byte-identical frontend assets, bilingual defaults and the account migration. Existing portability
 tests exercise application configuration from an unrelated CWD.
 Docker is installed but local Compose execution is unverified (Compose plugin unavailable).

@@ -26,9 +26,15 @@ typed Python clients use the same API. Optional [email and SimpleX clients](docs
 support verified bindings and confirmed commands; both remain disabled by default.
 
 The website supports Czech and English, separate recipe-language preferences, explicitly saved
-pantry stock and reusable presets. Upgrade the control database with
+pantry stock, named condiments, multi-store preferences, reusable presets and individual recipe
+bookmarks. Select cuisine styles or save current preferences directly from Recipes.
+Generate 1–6 recipe alternatives from one grocery snapshot; History keeps original
+reports and shopping lines link to their offer sources. Upgrade the control database with
 `.venv/bin/grocery-agent db upgrade control` before starting the updated API/worker;
 see [account state and revision-safe updates](docs/backend.md#account-preferences-pantry-and-presets).
+Each saved recipe offers [nutrition-app exports](docs/recipe-export.md): a manual-entry guide
+for Kalorické tabulky, ingredient lists for paste import, and schema.org Recipe JSON.
+Download or copy in Czech or English; exports keep original quantities and nutrition.
 
 ## Install
 

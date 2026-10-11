@@ -136,7 +136,7 @@ output copies must be outside that immutable tree. Backend results remain privat
 stored in the separate control database. Inputs include effective parameters, nutrition context, all
 selected collections, provenance and prompt version. Later collections cannot alter persisted results.
 
-Current migration heads are `offers_0003` and `control_0005`; production storage is never migrated
+Current migration heads are `offers_0003` and `control_0006`; production storage is never migrated
 automatically. Live model, retailer and container acceptance runs remain separately configured.
 Shared TOML defaults and portable installed application startup are documented in
 [configuration](configuration.md). The optional password/cookie session flow is in [backend](backend.md).
@@ -155,6 +155,64 @@ the requested language for titles and preparation steps; template recipes use co
 `titles` and `translated_steps`. Ingredient `labels` may provide Czech and English display names,
 with the existing `label` as fallback. Report headings and amounts follow the request language;
 changing the website language does not translate or regenerate historical reports.
+
+## Multiple recipes and named condiments
+
+Set `recipe_count` to 1–6, or use `--recipe-count 3`, to request several recipe alternatives.
+All candidates use one pinned grocery and pantry snapshot. Model calls are sequential and
+each candidate permits at most one structured-output repair: a batch of six can consume up to
+twelve provider calls. Nutrition, cost, shopping limits and ranking still use Decimal arithmetic;
+no failed candidate relaxes those limits or switches providers. Batch results expose `batch`
+counts and per-attempt failure codes, and omit duplicate recipes. A partially successful batch
+keeps its useful results with warnings. Omitting the count preserves previous single-model
+generation and fixed-template behavior.
+
+Alternatives each use the same owned stock. Their quantities are not added together and
+generating them never reserves or deducts pantry inventory. Previous requests and immutable
+reports remain available. Backend bookmarks retain an individual meal from its original report;
+they are not stock reservations, and removing a bookmark does not delete history.
+
+The optional `condiments` array accepts `salt`, `black_pepper`, `paprika`, `dried_herbs`,
+`cumin`, `chilli` and `garlic_powder`. Use repeatable `--condiment salt` flags; an explicit
+empty array means none. Omission preserves legacy `seasonings_available` behavior. Named
+condiments describe small seasoning additions; their amounts and nutrition are not calculated.
+An empty inventory uses the existing estimated seasoning-cost allowance. Add owned oil with
+`--have oil=100g`; condiments do not imply oil availability. The selected inventory is pinned
+with the effective request and included in model instructions.
+Configured templates retain their original seasoning instructions; with an explicit inventory,
+their reports warn you to omit condiments you did not select.
+
+For example, a channel command can request:
+
+```text
+recipe recipe_count=3 retailer=lidl,albert max_stores=2 condiments=salt,black_pepper
+```
+
+Shopping lines retain actual offer URLs and source/run provenance. Historical URLs may expire
+or describe an older offer; links are evidence of the source, not checkout-price guarantees.
+
+## Cuisine preferences
+
+`RecipeRequest.cuisine` is optional and independent of `meal_style` (main, breakfast or snack).
+It accepts `greek`, `chinese`, `vietnamese`, `indian`, `mexican`, `italian`, `thai`, `japanese`,
+`korean`, `french`, `spanish`, `mediterranean`, `czech` or `middle_eastern`. Omission or JSON
+null leaves cuisine unrestricted. The backend publishes IDs and bilingual labels through
+`/v1/capabilities`; saved presets retain the canonical ID.
+
+```sh
+.venv/bin/grocery-recipes --cuisine greek --recipe-count 3 --cache-only
+```
+
+Email and SimpleX commands accept `recipe cuisine=vietnamese`; `cuisine=none` clears the choice.
+Cuisine guidance applies to model-written recipes only. Requests pairing a cuisine with
+`provider=template` are rejected before acquisition or job submission, rather than relabeling
+unchanged fixed recipes. Choosing a cuisine does not grant ingredients or seasonings, change
+budget/nutrition/shopping limits, or guarantee authenticity or dietary suitability.
+
+Cuisine requests pin `recipe-draft-v3-cuisine`; unrestricted requests keep `recipe-draft-v2`.
+Pinned inputs and original requests retain the cuisine choice. Replaying a snapshot with a
+different cuisine is rejected. Applying or editing a preset never rewrites previous reports.
+This field uses existing JSON job/preset storage and requires no additional database migration.
 
 ## Local model benchmarking
 

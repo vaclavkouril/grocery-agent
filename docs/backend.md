@@ -66,8 +66,17 @@ Optional retailer IDs narrow configured retailer permissions. Loyalty permission
 (0–300 g), maximum energy (>0–10000 kcal), maximum cooking time (1–480 minutes), owned use-first
 ingredients and seasoning availability are shared with the CLI and channel parser.
 The configured meal catalogue supplies nutrition thresholds, scope, lactose rules and ingredient
-nutrition. The backend validates models against explicit allowlists. An omitted Codex model
-uses the installed CLI's configured model; Ollama requires an explicitly permitted local model.
+nutrition. The backend validates models against explicit allowlists. Codex permits only the
+recipe-benchmarked `gpt-6.1-sol` and `gpt-6-luna`, using low reasoning effort. An omitted Codex
+model resolves to the first configured allowed ID and is persisted explicitly, never delegated
+to the CLI default. Set `codex_models = []` to disable Codex submissions; configuration cannot
+add untested or expensive Codex IDs. Ollama requires an explicitly permitted local model.
+The default backend configuration enables all ten benchmarked local models, including weak
+ones. Administrators can narrow or extend `ollama_models` to match the worker's installation;
+the picker does not hide models based on quality. Start `ollama serve` on the worker host
+before generating local recipes. No model weights are downloaded automatically.
+See the [benchmark comparison](model-benchmark-round-two.md) for measured quality and timing;
+these tests do not guarantee continued cloud account access or quota costs.
 An omitted cache policy resolves to the advertised default (`cache-only` when permitted).
 Other policies and combined sources require explicit server configuration; see
 [shared recipe execution](recipe-service.md). Optional `profile_fingerprint` selects one published
@@ -144,8 +153,9 @@ limits before enabling it. Administrator operations remain separately protected.
 ## Account preferences, pantry and presets
 
 Before starting the updated API and worker, back up the control database and run
-`.venv/bin/grocery-agent db upgrade control`. The additive `control_0005` migration adds
-account state without changing offers, existing profiles, jobs or immutable reports. Startup
+`.venv/bin/grocery-agent db upgrade control`. The additive `control_0006` migration adds
+named pantry condiments, shopping preferences and recipe bookmarks, after the `control_0005`
+account-state migration, without changing offers, existing profiles, jobs or immutable reports. Startup
 does not migrate production storage automatically; the offer head remains `offers_0003`.
 
 All account-state routes require authentication, apply cookie CSRF protection, and address only
@@ -153,10 +163,14 @@ the current account. An administrator cannot use these routes to inspect another
 
 | Route | Behavior |
 | --- | --- |
-| `GET /v1/me/settings` | Read revision and nullable `ui_language` / `recipe_language` (`cs` or `en`). |
+| `GET /v1/me/settings` | Read revision and nullable languages, `retailer_ids` and `max_stores` (1–3). |
 | `PATCH /v1/me/settings` | Change supplied preferences with `expected_revision`; null clears a preference. |
-| `GET /v1/me/pantry` | Read revision and saved ingredient items. |
-| `PUT /v1/me/pantry` | Replace items with `expected_revision`; maximum 200 items. |
+| `GET /v1/me/pantry` | Read revision, saved ingredient items and named `condiments`. |
+| `PUT /v1/me/pantry` | Replace items with `expected_revision`; maximum 200 items. Omitted condiments preserve the saved selection; `[]` clears it. |
+| `POST /v1/me/saved-recipes` | Bookmark `{job_id,meal_index}` from an owned successful recipe job; idempotent (201 new, 200 existing), maximum 500. |
+| `GET /v1/me/saved-recipes` | Paginated owned bookmarks (`offset`, `limit`, maximum 100 per page). |
+| `GET /v1/me/saved-recipes/{id}` | Read the original meal, result and request, without generation or recalculation. |
+| `DELETE /v1/me/saved-recipes/{id}` | Remove only the bookmark; retain the original job and report. |
 | `GET /v1/me/presets` | List owned presets and whether their parameters are stale under current policy. |
 | `POST /v1/me/presets` | Create `{name,parameters}`; maximum 100 presets, names up to 100 characters. |
 | `GET/PATCH /v1/me/presets/{id}` | Read or update an owned preset; PATCH requires `expected_revision`. |
@@ -166,10 +180,23 @@ the current account. An administrator cannot use these routes to inspect another
 Pantry items have the shape `{"rice":{"grams":"500.25","use_first":true}}`.
 `grams` is an exact positive decimal string, or null for enough available stock. Saving pantry is
 explicit; submitting or completing recipes never deducts stock. Presets reject `pantry`,
-`use_first` and `request_id`, so applying preferences does not restore old stock or reuse an
+`condiments`, `use_first` and `request_id`, so applying preferences does not restore old stock or reuse an
 idempotency key. Existing profile rows are preserved and unsupported legacy parameters are
 marked stale, not silently converted. Conflicting revisions return HTTP 409; reload before
 retrying rather than overwriting another session's changes.
+
+Account shopping preferences apply to recipe submissions that omit `retailer_ids` or
+`max_stores`, including confirmed channel commands. Explicit request choices win, including
+an empty retailer list. Personalized capabilities expose the effective defaults; the website
+also uses preferred retailers when opening offers. Retailers may only narrow configured
+permissions. Store limits count distinct shopping contexts, not just chain names.
+Named condiments share the pantry revision. Oil remains an ordinary quantified ingredient;
+selecting spices never grants free oil or deducts stock. Bookmark IDs and jobs remain owner-only.
+
+Recipe requests and saved preset parameters may include an optional `cuisine` ID. Capabilities
+advertise `cuisine_ids` and localized `cuisine_labels`. Cuisine guides model recipes only;
+fixed-template requests with a cuisine return 422 before queueing. Existing JSON storage retains
+this preference without another migration, and changing a preset does not alter past jobs.
 
 Capabilities retain existing fields and additionally advertise languages, effective recipe
 defaults, retailer IDs, configured profile metadata, localized ingredient labels and read-only
@@ -178,6 +205,12 @@ server policy. Profile metadata excludes acquisition credentials and options. AP
 echoing input. Catalogue responses retain raw warnings and add `warning_codes` for translated UI.
 
 ## Jobs, recovery and channels
+
+Owner-authenticated `GET /v1/jobs/{job_id}/recipes/{meal_index}/export` downloads one saved meal
+as `format=text|ingredients|schema-org`, in `language=cs|en`. Capabilities publish the supported
+`recipe_export_formats`. Export uses original result quantities and pinned ingredient labels;
+it never refreshes the catalogue, invokes a provider or updates the job. Attachments are private
+and `no-store`. See [nutrition-app transfer instructions](recipe-export.md) for import limits.
 
 Jobs are deduplicated by `(user_id, Idempotency-Key)`; reusing a key for different parameters returns
 409. Without a header, `request_id` supplies the key. Pending jobs are capped per user. Queue states
