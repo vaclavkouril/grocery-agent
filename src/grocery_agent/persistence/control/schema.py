@@ -41,6 +41,19 @@ class AccountStateRow(ControlBase):
     recipe_language: Mapped[str | None] = mapped_column(String(2))
     pantry_revision: Mapped[int] = mapped_column(Integer, default=0)
     pantry_items: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    pantry_condiments: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
+    preferred_retailers: Mapped[list[str] | None] = mapped_column(JSON(none_as_null=True))
+    preferred_max_stores: Mapped[int | None] = mapped_column(Integer)
+
+
+class SavedRecipeRow(ControlBase):
+    __tablename__ = "saved_recipes"
+    __table_args__ = (UniqueConstraint("user_id", "job_id", "meal_index"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id"))
+    meal_index: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
 
 
 class SessionRow(ControlBase):

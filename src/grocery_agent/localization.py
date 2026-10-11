@@ -7,6 +7,16 @@ from typing import Literal
 
 Language = Literal["cs", "en"]
 
+CONDIMENT_LABELS = {
+    "salt": {"cs": "Sůl", "en": "Salt"},
+    "black_pepper": {"cs": "Černý pepř", "en": "Black pepper"},
+    "paprika": {"cs": "Mletá paprika", "en": "Paprika"},
+    "dried_herbs": {"cs": "Sušené bylinky", "en": "Dried herbs"},
+    "cumin": {"cs": "Římský kmín", "en": "Cumin"},
+    "chilli": {"cs": "Chilli", "en": "Chilli"},
+    "garlic_powder": {"cs": "Sušený česnek", "en": "Garlic powder"},
+}
+
 # English is also the compatibility key, keeping existing rendered wording stable.
 CS = {
     "Already owned": "Již doma",
@@ -191,13 +201,25 @@ musí být povoleny serverem. Rozpočet je v Kč na porci. Limit: 4096 znaků a 
 Pro ověření pošlete verify s tokenem pro váš kanál. Recept vyžadující potvrzení
 vrátí token; schvalte jej příkazem confirm TOKEN. Ověřovací a potvrzovací tokeny
 jsou odlišné a soukromé: 20 až 200 znaků bezpečných pro URL. ID úloh jsou UUID.
+recipe_count=1..6 určuje počet alternativ ze stejné zásoby.
+Tvorba používá nejvýše dvě volání modelu na recept.
+condiments přijímá čárkou oddělené hodnoty: salt, black_pepper, paprika,
+dried_herbs, cumin, chilli, garlic_powder. condiments=none znamená žádné koření;
+olej zadávejte samostatně pomocí have.
+cuisine vybírá styl kuchyně, například greek, chinese, vietnamese, indian nebo mexican;
+cuisine=none zruší volbu. Styly vyžadují modelové recepty, nikoli provider=template.
 """
 
 
 def channel_help(language: Language = "en") -> str:
     from grocery_agent.channel_commands import HELP_TEXT
+    from grocery_agent.cuisines import CUISINE_IDS
 
-    return HELP_CS if language == "cs" else HELP_TEXT
+    return (
+        HELP_CS + "\nPodporované kuchyně: " + ", ".join(CUISINE_IDS) + ".\n"
+        if language == "cs"
+        else HELP_TEXT
+    )
 
 
 def localized_notice(message: str, language: Language = "en") -> str:

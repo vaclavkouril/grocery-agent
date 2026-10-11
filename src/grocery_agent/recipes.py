@@ -13,15 +13,32 @@ from uuid import UUID, uuid4
 import httpx
 from pydantic import Field, field_validator, model_validator
 
+from grocery_agent.cuisines import CUISINE_LABELS, CuisineId
+from grocery_agent.model_choices import TESTED_CODEX_MODELS
 from grocery_agent.models.common import DomainModel, ExactDecimal, NonEmpty, PositiveAmount, StoreId
 
 NutritionLimit = Annotated[ExactDecimal, Field(ge=0, max_digits=16, decimal_places=6)]
+CondimentId = Literal[
+    "salt", "black_pepper", "paprika", "dried_herbs", "cumin", "chilli", "garlic_powder"
+]
+CONDIMENT_IDS: tuple[CondimentId, ...] = (
+    "salt",
+    "black_pepper",
+    "paprika",
+    "dried_herbs",
+    "cumin",
+    "chilli",
+    "garlic_powder",
+)
 
 
 class RecipeRequest(DomainModel):
     request_id: UUID = Field(default_factory=uuid4)
     language: Literal["cs", "en"] = "en"
     servings: int = Field(default=2, ge=1, le=20)
+    recipe_count: int | None = Field(default=None, strict=True, ge=1, le=6)
+    condiments: tuple[CondimentId, ...] | None = None
+    cuisine: CuisineId | None = None
     meal_style: str = "main"
     pantry: dict[str, str] = Field(default_factory=dict)
     exclusions: tuple[str, ...] = ()
@@ -40,6 +57,15 @@ class RecipeRequest(DomainModel):
     source_ids: tuple[str, ...] = ("kupi",)
     profile_fingerprint: str | None = Field(default=None, pattern=r"^(?:legacy|[0-9a-f]{24})$")
     profile_fingerprints: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("condiments")
+    @classmethod
+    def unique_condiments(
+        cls, values: tuple[CondimentId, ...] | None
+    ) -> tuple[CondimentId, ...] | None:
+        if values is not None and len(set(values)) != len(values):
+            raise ValueError("condiments must contain unique IDs")
+        return values
 
     @field_validator("retailer_ids", "use_first")
     @classmethod
@@ -137,7 +163,30 @@ def recipe_prompt(request: RecipeRequest, context: str) -> str:
             "language": request.language,
             "instructions": "Write the title and all steps in "
             + ("Czech" if request.language == "cs" else "English")
-            + ". Keep canonical ingredient IDs unchanged.",
+            + ". Keep canonical ingredient IDs unchanged. Generate exactly one draft. "
+            "Use named owned_stock described in context, respecting its gram amounts "
+            "(grams=null means enough is owned; use_first marks priority). "
+            "Never assume oil is owned; include it only as a known ingredient with grams."
+            + (
+                " Only the explicitly selected condiments are available: "
+                + ", ".join(request.condiments)
+                + ". These are optional small seasoning additions in steps only, not ingredient "
+                "lines or a source of calculated nutrition. No other seasoning is assumed."
+                if request.condiments is not None
+                else ""
+            )
+            + (
+                " Use the selected cuisine as inspiration: "
+                + CUISINE_LABELS[request.cuisine][request.language]
+                + " ("
+                + request.cuisine
+                + "). Adapt to locally available ingredients using only "
+                "known ingredient IDs with nutrition data in context and explicitly selected "
+                "condiments. Do not introduce unavailable ingredients or condiments to match "
+                "the cuisine. Describe this as a local adaptation; do not guarantee authenticity."
+                if request.cuisine is not None
+                else ""
+            ),
             "request": request.model_dump(mode="json"),
             "context": context,
         }
@@ -165,6 +214,11 @@ class RecipeProvider(Protocol):
 
 class TemplateProvider:
     def generate(self, request: RecipeRequest, context: str) -> dict[str, Any]:
+        if request.cuisine is not None:
+            raise ValueError(
+                "Configured templates cannot adapt to a selected cuisine; "
+                "choose provider=codex or provider=ollama, or clear cuisine (cuisine=none)."
+            )
         return {
             "title": "Jednoduchá pánev" if request.language == "cs" else "Simple skillet",
             "ingredients": [{"ingredient": "zelenina", "quantity": 300}],
@@ -196,6 +250,8 @@ class CodexProvider:
             ]
             if self.model:
                 command[2:2] = ["--model", self.model]
+                if self.model in TESTED_CODEX_MODELS:
+                    command[2:2] = ["-c", 'model_reasoning_effort="low"']
             try:
                 completed = subprocess.run(
                     command,
@@ -206,8 +262,10 @@ class CodexProvider:
                     timeout=self.timeout,
                     check=True,
                 )
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError("Codex provider timed out") from exc
             except (OSError, subprocess.SubprocessError) as exc:
-                raise RuntimeError("Codex provider failed or timed out") from exc
+                raise RuntimeError("Codex provider failed") from exc
         try:
             value = json.loads(completed.stdout)
             if not isinstance(value, dict):
@@ -266,6 +324,11 @@ def validate_result(request: RecipeRequest, draft: dict[str, Any]) -> RecipeResu
 def generate_recipe(
     request: RecipeRequest, context: str = "", provider: RecipeProvider | None = None
 ) -> RecipeResult:
+    if request.provider == "template" and request.cuisine is not None:
+        raise ValueError(
+            "Configured templates cannot adapt to a selected cuisine; "
+            "choose provider=codex or provider=ollama, or clear cuisine (cuisine=none)."
+        )
     if provider is None:
         if request.provider == "template":
             provider = TemplateProvider()

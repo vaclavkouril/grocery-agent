@@ -11,6 +11,7 @@ from uuid import UUID
 
 from grocery_agent.application.parameters import parse_owned_stock
 from grocery_agent.contracts import Capabilities
+from grocery_agent.cuisines import CUISINE_IDS
 from grocery_agent.models.common import DomainModel
 from grocery_agent.recipes import RecipeRequest
 
@@ -24,11 +25,17 @@ recipe [key=value ...] (meal and meals are aliases)
 
 Recipe parameters: provider, model, source, profile (or profile_fingerprint),
 profiles (comma-separated SOURCE:FINGERPRINT),
-cache_policy, servings, language (cs/en), meal_style
+cache_policy, servings, recipe_count (1..6), condiments (comma-separated IDs),
+language (cs/en), cuisine, meal_style
 (or style), have, budget, max_stores, exclude (or exclusions),
 retailer (or retailer_ids), allow_loyalty, min_protein (or min_protein_g),
 max_kcal, max_minutes, use_first, have_seasonings (or seasonings_available).
 Retailers and use_first accept comma-separated IDs. Boolean values are true/false.
+Condiments: salt, black_pepper, paprika, dried_herbs, cumin, chilli, garlic_powder.
+Use condiments=none to explicitly select no condiments.
+Cuisines: {cuisine_ids}.
+Use cuisine=none to clear cuisine. Cuisine selection requires codex or ollama;
+configured templates keep their original recipes.
 Protein is 0..300 g, calories are >0..10000; max_minutes is an integer from 1 to 480.
 Use quotes for values containing spaces. Parameters and aliases must be unique.
 Examples:
@@ -43,7 +50,7 @@ For verification, send verify with the token issued to your channel. A recipe
 requiring confirmation returns a confirmation token; send confirm with that
 token to approve it. Verification and confirmation tokens are distinct, private,
 and contain 20 to 200 URL-safe characters. Job IDs are UUIDs.
-"""
+""".replace("{cuisine_ids}", ", ".join(CUISINE_IDS))
 
 
 class ChannelAction(DomainModel):
@@ -62,6 +69,9 @@ _FIELDS = {
     "profile_fingerprint": "profile_fingerprint",
     "cache_policy": "cache_policy",
     "servings": "servings",
+    "recipe_count": "recipe_count",
+    "condiments": "condiments",
+    "cuisine": "cuisine",
     "meal_style": "meal_style",
     "style": "meal_style",
     "have": "pantry",
@@ -138,9 +148,9 @@ def parse_channel_command(
     if language is not None:
         values["language"] = language
     for field, value in supplied.items():
-        if field in {"servings", "max_stores", "max_minutes"}:
+        if field in {"servings", "max_stores", "max_minutes", "recipe_count"}:
             if not value.isascii() or not value.isdigit():
-                raise ValueError("servings/max_stores/max_minutes must be integers")
+                raise ValueError("servings/max_stores/max_minutes/recipe_count must be integers")
             values[field] = int(value)
         elif field in {"allow_loyalty", "seasonings_available"}:
             if value not in {"true", "false"}:
@@ -154,7 +164,11 @@ def parse_channel_command(
             values[field] = {
                 key: entry.partition("=")[2] for key, entry in zip(parsed, entries, strict=True)
             }
-        elif field in {"exclusions", "retailer_ids", "use_first"}:
+        elif field == "cuisine" and value == "none":
+            values[field] = None
+        elif field == "condiments" and value == "none":
+            values[field] = ()
+        elif field in {"exclusions", "retailer_ids", "use_first", "condiments"}:
             items = tuple(item.strip() for item in value.split(","))
             if not all(items) or len(set(items)) != len(items):
                 raise ValueError("selections must contain unique nonempty IDs")

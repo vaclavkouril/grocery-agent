@@ -10,10 +10,22 @@ from grocery_agent.backend.api import create_app
 from grocery_agent.backend.config import BackendSettings
 from grocery_agent.backend.repository import ControlRepository
 from grocery_agent.config import Settings
+from grocery_agent.cuisines import CUISINE_IDS, CUISINE_LABELS
+from grocery_agent.localization import channel_help
+from grocery_agent.recipes import CONDIMENT_IDS
 from tests.application_support import NOW
 from tests.test_backend import control_repo as control_repo
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("language", ["cs", "en"])
+def test_channel_help_discovers_inventory_and_batch_options(language: Any) -> None:
+    help_text = channel_help(language)
+    assert "recipe_count" in help_text and "condiments=none" in help_text
+    assert all(condiment in help_text for condiment in CONDIMENT_IDS)
+    assert all(cuisine in help_text for cuisine in CUISINE_IDS)
+    assert "cuisine=none" in help_text
 
 
 def client(repo: ControlRepository, tmp_path: Path) -> TestClient:
@@ -49,10 +61,22 @@ def test_capabilities_publish_effective_defaults_and_translated_labels(
     )
     assert data["read_only_policy"]["currency"] == "CZK"
     assert data["read_only_policy"]["provider_timeout_seconds"] == 120
+    assert data["max_recipe_count"] == 6
+    assert data["saved_recipes_enabled"] is True
+    assert data["shopping_defaults"] == {"retailer_ids": [], "max_stores": 1}
+    assert tuple(data["cuisine_ids"]) == CUISINE_IDS
+    assert data["cuisine_labels"] == CUISINE_LABELS
+    assert set(CUISINE_IDS) == set(CUISINE_LABELS)
+    assert set(data["condiment_ids"]) == set(data["condiment_labels"])
+    assert set(data["condiment_ids"]) == set(CONDIMENT_IDS)
+    assert "salt" in data["condiment_ids"]
+    assert "oil" not in data["condiment_ids"]
     assert response.headers["Cache-Control"] == "no-store"
 
 
-@pytest.mark.parametrize("path", ["/v1/me/settings", "/v1/me/pantry", "/v1/me/presets"])
+@pytest.mark.parametrize(
+    "path", ["/v1/me/settings", "/v1/me/pantry", "/v1/me/presets", "/v1/me/saved-recipes"]
+)
 def test_private_settings_require_authentication(
     control_repo: ControlRepository,
     tmp_path: Path,

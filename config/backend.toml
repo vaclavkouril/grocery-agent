@@ -1,7 +1,15 @@
 # Environment GROCERY_BACKEND_* values override this application configuration.
-providers = ["codex", "template"]
-codex_models = []
-ollama_models = []
+providers = ["codex", "ollama", "template"]
+# Only these two cheap, recipe-benchmarked Codex IDs are permitted. No CLI fallback.
+codex_models = ["gpt-6.1-sol", "gpt-6-luna"]
+# All installed benchmarked local choices, including weak/experimental models.
+# Run Ollama on the worker host. Configuration does not download models.
+ollama_models = [
+  "LiquidAI/lfm2.5-1.2b-instruct:q4_k_m", "qwen3.5:0.8b",
+  "smollm2:1.7b-instruct-q4_K_M", "llama3.2:1b-instruct-q4_K_M",
+  "qwen3:1.7b", "qwen2.5:1.5b", "gemma3:1b",
+  "qwen2.5-coder:0.5b", "qwen2.5-coder:1.5b", "codegemma:2b",
+]
 cache_policies = ["cache-only"]
 # Recipe acquisition is opt-in. For other policies, configure acquisition_profiles
 # and (for combined requests) explicit source_scopes, matching the worker environment.

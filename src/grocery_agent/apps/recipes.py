@@ -15,11 +15,12 @@ import httpx
 from grocery_agent.application.parameters import parse_owned_stock
 from grocery_agent.config import Settings
 from grocery_agent.configuration import shared_config_context
+from grocery_agent.cuisines import CUISINE_IDS
 from grocery_agent.http_client import BackendError, GroceryClient
 from grocery_agent.meals.report import atomic_write
 from grocery_agent.recipe_config import RecipeSettings
 from grocery_agent.recipe_service import RecipeService
-from grocery_agent.recipes import RecipeRequest
+from grocery_agent.recipes import CONDIMENT_IDS, RecipeRequest
 
 # Compatibility export for older callers/tests; local execution uses RecipeService.
 from grocery_agent.recipes import generate_recipe as generate_recipe
@@ -71,11 +72,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--model")
     parser.add_argument("--language", choices=("cs", "en"), default="en")
     parser.add_argument("--servings", type=int, default=2)
+    parser.add_argument("--recipe-count", type=int)
+    parser.add_argument("--condiment", choices=CONDIMENT_IDS, action="append", default=None)
+    parser.add_argument("--cuisine", choices=CUISINE_IDS)
     parser.add_argument("--meal-style", default="main")
     parser.add_argument("--have", action="append", default=[])
     parser.add_argument("--budget")
-    parser.add_argument("--max-stores", type=int, default=1)
-    parser.add_argument("--retailer", action="append", default=[])
+    parser.add_argument("--max-stores", type=int, default=None)
+    parser.add_argument("--retailer", action="append", default=None)
     loyalty = parser.add_mutually_exclusive_group()
     loyalty.add_argument("--allow-loyalty", dest="allow_loyalty", action="store_true")
     loyalty.add_argument("--no-loyalty", dest="allow_loyalty", action="store_false")
@@ -129,11 +133,11 @@ def _run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         values: dict[str, object] = {
             "language": args.language,
             "servings": args.servings,
+            "recipe_count": args.recipe_count,
+            "condiments": args.condiment,
             "meal_style": args.meal_style,
             "pantry": pantry,
-            "max_stores": args.max_stores,
             "exclusions": args.exclude,
-            "retailer_ids": args.retailer,
             "allow_loyalty": args.allow_loyalty,
             "min_protein_g": args.min_protein,
             "max_kcal": args.max_kcal,
@@ -141,6 +145,12 @@ def _run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
             "use_first": args.use_first,
             "seasonings_available": args.have_seasonings,
         }
+        if args.max_stores is not None:
+            values["max_stores"] = args.max_stores
+        if args.cuisine is not None:
+            values["cuisine"] = args.cuisine
+        if args.retailer is not None:
+            values["retailer_ids"] = args.retailer
         if args.model:
             values["model"] = args.model
         if args.budget:

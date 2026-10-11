@@ -548,6 +548,25 @@ class ControlRepository:
             )
             return (row.result or {}, row.report_html or "") if row else None
 
+    def recipe_export_result(self, user_id: str, job_id: str) -> dict[str, Any] | None:
+        """Use immutable result and pinned ingredient labels, never current catalogue data."""
+        with self.sessions() as session:
+            row = session.scalar(
+                select(JobRow).where(
+                    JobRow.id == job_id,
+                    JobRow.user_id == user_id,
+                    JobRow.state == "succeeded",
+                    JobRow.kind == "recipe",
+                )
+            )
+            if row is None:
+                return None
+            result = dict(row.result) if isinstance(row.result, dict) else {}
+            catalog = row.inputs.get("catalog") if isinstance(row.inputs, dict) else None
+            if isinstance(catalog, dict) and isinstance(catalog.get("ingredients"), dict):
+                result["ingredient_snapshot"] = catalog["ingredients"]
+            return result
+
     def cancel(self, user_id: str, job_id: str, now: datetime) -> bool:
         with self.sessions.begin() as session:
             row = session.scalar(

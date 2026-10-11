@@ -62,6 +62,8 @@ async def test_settings_defaults_partial_patch_conflicts_and_persistence(account
             "revision": 0,
             "ui_language": None,
             "recipe_language": None,
+            "retailer_ids": None,
+            "max_stores": None,
         }
         changed = await client.patch_settings(SettingsPatch(expected_revision=0, ui_language="cs"))
         assert changed.revision == 1 and changed.recipe_language is None
@@ -83,6 +85,8 @@ async def test_settings_defaults_partial_patch_conflicts_and_persistence(account
             "revision": 3,
             "ui_language": None,
             "recipe_language": "en",
+            "retailer_ids": None,
+            "max_stores": None,
         }
     )
     async with AsyncGroceryClient(

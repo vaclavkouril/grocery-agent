@@ -55,6 +55,14 @@ class Capabilities(DomainModel):
     languages: tuple[Literal["cs", "en"], ...] = ("cs", "en")
     defaults: dict[str, Any] = Field(default_factory=dict)
     retailer_ids: tuple[str, ...] = ()
+    condiment_ids: tuple[str, ...] = ()
+    condiment_labels: dict[str, dict[str, str]] = Field(default_factory=dict)
+    cuisine_ids: tuple[str, ...] = ()
+    cuisine_labels: dict[str, dict[str, str]] = Field(default_factory=dict)
+    max_recipe_count: int = 6
+    saved_recipes_enabled: bool = True
+    recipe_export_formats: tuple[Literal["text", "ingredients", "schema-org"], ...] = ()
+    shopping_defaults: dict[str, Any] = Field(default_factory=dict)
     profile_metadata: dict[str, tuple[ProfileMetadata, ...]] = Field(default_factory=dict)
     read_only_policy: dict[str, Any] = Field(default_factory=dict)
     meal_styles: tuple[str, ...]

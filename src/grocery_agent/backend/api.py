@@ -13,11 +13,14 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from grocery_agent.account_preferences import apply_shopping_preferences
 from grocery_agent.acquisition.profiles import profiled_adapter
 from grocery_agent.catalogue.api import create_app as catalogue_app
 from grocery_agent.catalogue.models import CatalogueQuery
 from grocery_agent.config import Settings
 from grocery_agent.contracts import Capabilities, JobPage
+from grocery_agent.cuisines import CUISINE_IDS, CUISINE_LABELS
+from grocery_agent.localization import CONDIMENT_LABELS
 from grocery_agent.meals.catalog import MealCatalog
 from grocery_agent.models.common import DomainModel, StoreId, utc_now
 from grocery_agent.persistence.control.config import ControlSettings
@@ -439,8 +442,16 @@ def create_app(
                     for key, value in catalog.ingredients.items()
                 },
                 "languages": ["cs", "en"],
-                "defaults": recipe_defaults(),
+                "recipe_export_formats": ["text", "ingredients", "schema-org"],
+                "defaults": recipe_defaults(user.user_id),
                 "retailer_ids": catalog.policy.retailers,
+                "condiment_ids": list(CONDIMENT_LABELS),
+                "condiment_labels": CONDIMENT_LABELS,
+                "cuisine_ids": CUISINE_IDS,
+                "cuisine_labels": CUISINE_LABELS,
+                "max_recipe_count": 6,
+                "saved_recipes_enabled": True,
+                "shopping_defaults": {"retailer_ids": [], "max_stores": 1},
                 "profile_metadata": profile_metadata(),
                 "read_only_policy": {
                     "currency": "CZK",
@@ -475,7 +486,7 @@ def create_app(
             }
         )
 
-    def recipe_defaults() -> dict[str, Any]:
+    def recipe_defaults(user_id: str) -> dict[str, Any]:
         defaults = RecipeRequest().model_dump(mode="json", exclude={"request_id"})
         defaults.update(
             provider="codex"
@@ -489,6 +500,8 @@ def create_app(
             ],
             seasonings_available=catalog.pantry.seasonings_available,
         )
+        models = backend.codex_models if defaults["provider"] == "codex" else backend.ollama_models
+        defaults["model"] = models[0] if defaults["provider"] != "template" and models else None
         for field in (
             "min_protein_g",
             "max_kcal",
@@ -497,6 +510,12 @@ def create_app(
             "allow_loyalty",
         ):
             defaults[field] = catalog.policy.model_dump(mode="json")[field]
+        from grocery_agent.backend.user_state import UserStateRepository
+
+        preferences = UserStateRepository(repository).settings(user_id)
+        for field in ("retailer_ids", "max_stores"):
+            if preferences.get(field) is not None:
+                defaults[field] = preferences[field]
         return defaults
 
     def profile_metadata() -> dict[str, list[dict[str, Any]]]:
@@ -553,6 +572,10 @@ def create_app(
                 422, "Provider or cache policy is not permitted; check capabilities"
             )
         allowed = backend.ollama_models if payload.provider == "ollama" else backend.codex_models
+        if payload.provider == "codex" and payload.model is None:
+            if not allowed:
+                raise HTTPException(422, "Model is not configured on this server")
+            payload = payload.model_copy(update={"model": allowed[0]})
         if (payload.provider == "ollama" and payload.model not in allowed) or (
             payload.model is not None
             and (payload.provider == "template" or payload.model not in allowed)
@@ -621,7 +644,13 @@ def create_app(
         user: Annotated[Principal, Depends(principal)],
         idempotency_key: Annotated[str | None, Header(min_length=1, max_length=200)] = None,
     ) -> JobView:
-        payload = validate_request(payload)
+        from grocery_agent.backend.user_state import UserStateRepository
+
+        payload = validate_request(
+            apply_shopping_preferences(
+                payload, UserStateRepository(repository).settings(user.user_id)
+            )
+        )
         key = idempotency_key or str(payload.request_id)
         normalized = payload.model_dump(mode="json", exclude={"request_id"})
         # Use a request ID derived from the owned idempotency key so retries without an
@@ -713,6 +742,37 @@ def create_app(
             headers={
                 "Cache-Control": "no-store",
                 "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+            },
+        )
+
+    @app.get("/v1/jobs/{job_id}/recipes/{meal_index}/export", response_class=Response)
+    def recipe_export(
+        job_id: str,
+        meal_index: int,
+        user: Annotated[Principal, Depends(principal)],
+        format: Literal["text", "ingredients", "schema-org"] = "text",
+        language: Literal["cs", "en"] = "cs",
+    ) -> Response:
+        from grocery_agent.recipe_exports import export_recipe
+
+        owned_job(user, job_id)
+        completed = repository.recipe_export_result(user.user_id, job_id)
+        if completed is None:
+            raise HTTPException(409, "Job has no successful recipe result yet")
+        try:
+            exported = export_recipe(completed, meal_index, format=format, language=language)
+        except ValueError:
+            raise HTTPException(
+                422, "Recipe cannot be exported; check the saved meal index"
+            ) from None
+        filename = f"recipe-{meal_index + 1}.{exported.extension}"
+        return Response(
+            content=exported.body,
+            media_type=exported.media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
             },
         )
 

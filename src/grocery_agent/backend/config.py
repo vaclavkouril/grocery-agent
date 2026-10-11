@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, Settings
 
 from grocery_agent.catalogue.profiles import AcquisitionProfile
 from grocery_agent.configuration import MappingDefaultsSource, app_defaults, shared_defaults
+from grocery_agent.model_choices import BENCHMARKED_LOCAL_MODELS, TESTED_CODEX_MODELS
 from grocery_agent.models.common import StoreId
 
 
@@ -15,9 +16,9 @@ class BackendSettings(BaseSettings):
         env_prefix="GROCERY_BACKEND_", extra="forbid", hide_input_in_errors=True
     )
 
-    providers: tuple[Literal["codex", "ollama", "template"], ...] = ("codex", "template")
-    codex_models: tuple[str, ...] = ()
-    ollama_models: tuple[str, ...] = ()
+    providers: tuple[Literal["codex", "ollama", "template"], ...] = ("codex", "ollama", "template")
+    codex_models: tuple[str, ...] = TESTED_CODEX_MODELS
+    ollama_models: tuple[str, ...] = BENCHMARKED_LOCAL_MODELS
     cache_policies: tuple[Literal["local", "refresh", "no-cache", "cache-only"], ...] = Field(
         default=("cache-only",), min_length=1
     )
@@ -68,6 +69,11 @@ class BackendSettings(BaseSettings):
 
     @model_validator(mode="after")
     def unique_permissions(self) -> Self:
+        if not set(self.codex_models) <= set(TESTED_CODEX_MODELS):
+            raise ValueError("Codex models must be cheap recipe-benchmarked models")
+        for models in (self.codex_models, self.ollama_models):
+            if len(set(models)) != len(models) or any(not model.strip() for model in models):
+                raise ValueError("models must be unique nonempty IDs")
         if self.registration_enabled and not self.password_login_enabled:
             raise ValueError("self-registration requires password_login_enabled")
         if self.trusted_origin is not None:

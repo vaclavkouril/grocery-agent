@@ -6,8 +6,9 @@ from typing import Annotated, Any
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response
+from fastapi.routing import APIRoute
 from pydantic import ValidationError
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from grocery_agent.account_models import (
@@ -17,16 +18,26 @@ from grocery_agent.account_models import (
     PresetPage,
     PresetUpdate,
     PresetView,
+    SavedRecipeCreate,
+    SavedRecipeDetail,
+    SavedRecipePage,
+    SavedRecipeView,
     SettingsPatch,
     SettingsView,
 )
 from grocery_agent.contracts import Principal
-from grocery_agent.persistence.control.schema import AccountStateRow, JobRow, ProfileRow, UserRow
+from grocery_agent.persistence.control.schema import (
+    AccountStateRow,
+    JobRow,
+    ProfileRow,
+    SavedRecipeRow,
+    UserRow,
+)
 from grocery_agent.recipes import RecipeRequest
 
 from .repository import ControlRepository
 
-TRANSIENT_PARAMETERS = {"pantry", "use_first", "request_id"}
+TRANSIENT_PARAMETERS = {"pantry", "use_first", "request_id", "condiments"}
 
 
 def preset_view(
@@ -79,6 +90,7 @@ class UserStateRepository:
                 settings_revision=0,
                 pantry_revision=0,
                 pantry_items={},
+                pantry_condiments=[],
                 ui_language=None,
                 recipe_language=None,
             )
@@ -96,6 +108,8 @@ class UserStateRepository:
                 "revision": row.settings_revision,
                 "ui_language": row.ui_language,
                 "recipe_language": row.recipe_language,
+                "retailer_ids": row.preferred_retailers,
+                "max_stores": row.preferred_max_stores,
             }
         )
 
@@ -105,6 +119,11 @@ class UserStateRepository:
             row = self._state(session, user_id)
             check_revision(row.settings_revision, payload.expected_revision)
             values = payload.model_dump(exclude={"expected_revision"}, exclude_unset=True)
+            if "retailer_ids" in values:
+                selected = values.pop("retailer_ids")
+                values["preferred_retailers"] = list(selected) if selected is not None else None
+            if "max_stores" in values:
+                values["preferred_max_stores"] = values.pop("max_stores")
             session.flush()
             changed = session.scalar(
                 update(AccountStateRow)
@@ -123,7 +142,11 @@ class UserStateRepository:
         with self.sessions() as session:
             row = session.get(AccountStateRow, user_id)
             return (
-                PantryView(revision=row.pantry_revision, items=row.pantry_items)
+                PantryView(
+                    revision=row.pantry_revision,
+                    items=row.pantry_items,
+                    condiments=tuple(row.pantry_condiments),
+                )
                 if row
                 else PantryView()
             )
@@ -133,6 +156,12 @@ class UserStateRepository:
             self._lock_owner(session, user_id)
             row = self._state(session, user_id)
             check_revision(row.pantry_revision, payload.expected_revision)
+            values = {
+                "pantry_items": payload.model_dump(mode="json")["items"],
+                "pantry_revision": payload.expected_revision + 1,
+            }
+            if "condiments" in payload.model_fields_set:
+                values["pantry_condiments"] = list(payload.condiments)
             session.flush()
             changed = session.scalar(
                 update(AccountStateRow)
@@ -140,15 +169,122 @@ class UserStateRepository:
                     AccountStateRow.user_id == user_id,
                     AccountStateRow.pantry_revision == payload.expected_revision,
                 )
-                .values(
-                    pantry_items=payload.model_dump(mode="json")["items"],
-                    pantry_revision=payload.expected_revision + 1,
-                )
+                .values(**values)
                 .returning(AccountStateRow)
             )
             if changed is None:
                 raise HTTPException(409, "Revision conflict; reload current state")
-            return PantryView(revision=changed.pantry_revision, items=changed.pantry_items)
+            return PantryView(
+                revision=changed.pantry_revision,
+                items=changed.pantry_items,
+                condiments=tuple(changed.pantry_condiments),
+            )
+
+    def _saved_job(self, session: Session, user_id: str, job_id: str) -> JobRow:
+        job = session.scalar(select(JobRow).where(JobRow.id == job_id, JobRow.user_id == user_id))
+        if job is None:
+            raise HTTPException(404, "Recipe job not found")
+        return job
+
+    def _saved_view(self, row: SavedRecipeRow, job: JobRow) -> SavedRecipeDetail:
+        result = job.result or {}
+        return SavedRecipeDetail(
+            id=row.id,
+            job_id=row.job_id,
+            meal_index=row.meal_index,
+            created_at=row.created_at,
+            meal=result["report"]["meals"][row.meal_index],
+            request=job.request,
+            result=result,
+        )
+
+    def save_recipe(
+        self, user_id: str, payload: SavedRecipeCreate, now: datetime
+    ) -> tuple[SavedRecipeDetail, bool]:
+        with self.sessions.begin() as session:
+            self._lock_owner(session, user_id)
+            job = self._saved_job(session, user_id, payload.job_id)
+            if job.kind != "recipe" or job.state != "succeeded":
+                raise HTTPException(422, "Only succeeded recipe jobs can be bookmarked")
+            report = (job.result or {}).get("report")
+            meals = report.get("meals") if isinstance(report, dict) else None
+            if (
+                not isinstance(meals, list)
+                or not 0 <= payload.meal_index < len(meals)
+                or not isinstance(meals[payload.meal_index], dict)
+            ):
+                raise HTTPException(422, "Invalid report meal index")
+            existing = session.scalar(
+                select(SavedRecipeRow).where(
+                    SavedRecipeRow.user_id == user_id,
+                    SavedRecipeRow.job_id == payload.job_id,
+                    SavedRecipeRow.meal_index == payload.meal_index,
+                )
+            )
+            if existing is not None:
+                return self._saved_view(existing, job), False
+            count = session.scalar(
+                select(func.count())
+                .select_from(SavedRecipeRow)
+                .where(SavedRecipeRow.user_id == user_id)
+            )
+            if count is not None and count >= 500:
+                raise HTTPException(409, "Saved recipe limit reached (500)")
+            row = SavedRecipeRow(
+                id=str(uuid4()),
+                user_id=user_id,
+                job_id=job.id,
+                meal_index=payload.meal_index,
+                created_at=now,
+            )
+            session.add(row)
+            return self._saved_view(row, job), True
+
+    def saved_recipes(self, user_id: str, *, offset: int = 0, limit: int = 20) -> SavedRecipePage:
+        with self.sessions() as session:
+            owned = SavedRecipeRow.user_id == user_id
+            total = session.scalar(select(func.count()).select_from(SavedRecipeRow).where(owned))
+            rows = session.execute(
+                select(SavedRecipeRow, JobRow)
+                .join(JobRow, SavedRecipeRow.job_id == JobRow.id)
+                .where(owned, JobRow.user_id == user_id)
+                .order_by(SavedRecipeRow.created_at.desc(), SavedRecipeRow.id.desc())
+                .offset(offset)
+                .limit(limit)
+            ).all()
+            return SavedRecipePage(
+                items=[
+                    SavedRecipeView.model_validate(
+                        self._saved_view(row, job).model_dump(exclude={"request", "result"})
+                    )
+                    for row, job in rows
+                ],
+                total=total or 0,
+                offset=offset,
+                limit=limit,
+            )
+
+    def saved_recipe(self, user_id: str, saved_id: str) -> SavedRecipeDetail:
+        with self.sessions() as session:
+            row = session.scalar(
+                select(SavedRecipeRow).where(
+                    SavedRecipeRow.user_id == user_id, SavedRecipeRow.id == saved_id
+                )
+            )
+            if row is None:
+                raise HTTPException(404, "Saved recipe not found")
+            return self._saved_view(row, self._saved_job(session, user_id, row.job_id))
+
+    def delete_saved_recipe(self, user_id: str, saved_id: str) -> None:
+        with self.sessions.begin() as session:
+            self._lock_owner(session, user_id)
+            removed = session.scalar(
+                delete(SavedRecipeRow)
+                .where(SavedRecipeRow.user_id == user_id, SavedRecipeRow.id == saved_id)
+                .returning(SavedRecipeRow.id)
+            )
+            if removed is None:
+                raise HTTPException(404, "Saved recipe not found")
 
     def presets(self, user_id: str) -> PresetPage:
         with self.sessions() as session:
@@ -302,7 +438,63 @@ def mount_user_state(
     def patch_settings(
         payload: SettingsPatch, user: Annotated[Principal, Depends(principal)]
     ) -> SettingsView:
+        if payload.model_fields_set & {"retailer_ids", "max_stores"}:
+            # Reuse configured defaults without acquisition or provider work. The
+            # capabilities endpoint is already mounted by the application.
+            defaults: dict[str, Any] = {}
+            for route in app.routes:
+                if isinstance(route, APIRoute) and route.path == "/v1/capabilities":
+                    defaults = dict(route.endpoint(user).defaults)
+                    break
+            changes = {
+                key: value if value is not None else getattr(RecipeRequest(), key)
+                for key, value in payload.model_dump(exclude_unset=True).items()
+                if key in {"retailer_ids", "max_stores"}
+            }
+            try:
+                validate(
+                    RecipeRequest.model_validate(
+                        {
+                            key: value
+                            for key, value in defaults.items()
+                            if key in RecipeRequest.model_fields
+                        }
+                    ).model_copy(update=changes)
+                )
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
         return repo.patch_settings(user.user_id, payload)
+
+    @app.post("/v1/me/saved-recipes", status_code=201, response_model=SavedRecipeDetail)
+    def save_recipe(
+        payload: SavedRecipeCreate,
+        response: Response,
+        user: Annotated[Principal, Depends(principal)],
+    ) -> SavedRecipeDetail:
+        saved, created = repo.save_recipe(user.user_id, payload, clock())
+        response.status_code = 201 if created else 200
+        return saved
+
+    @app.get("/v1/me/saved-recipes", response_model=SavedRecipePage)
+    def saved_recipes(
+        user: Annotated[Principal, Depends(principal)],
+        offset: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    ) -> SavedRecipePage:
+        return repo.saved_recipes(user.user_id, offset=offset, limit=limit)
+
+    @app.get("/v1/me/saved-recipes/{saved_id}", response_model=SavedRecipeDetail)
+    def saved_recipe(
+        saved_id: str, user: Annotated[Principal, Depends(principal)]
+    ) -> SavedRecipeDetail:
+        return repo.saved_recipe(user.user_id, saved_id)
+
+    @app.delete("/v1/me/saved-recipes/{saved_id}", status_code=204)
+    def delete_saved_recipe(
+        saved_id: str, user: Annotated[Principal, Depends(principal)]
+    ) -> Response:
+        repo.delete_saved_recipe(user.user_id, saved_id)
+        return Response(status_code=204)
 
     @app.get("/v1/me/pantry", response_model=PantryView)
     def pantry(user: Annotated[Principal, Depends(principal)]) -> PantryView:

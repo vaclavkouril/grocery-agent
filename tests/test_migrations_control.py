@@ -53,12 +53,13 @@ def test_independent_schemas_and_revisions(tmp_path: Path) -> None:
     offers = open_database(f"sqlite:///{tmp_path / 'offers.db'}")
     control = create_database_engine(f"sqlite:///{tmp_path / 'control.db'}")
     try:
-        assert upgrade_database(control, "control") == "control_0005"
+        assert upgrade_database(control, "control") == "control_0006"
         assert schema_version(offers, "offers") == "offers_0003"
         assert set(inspect(control).get_table_names()) == {
             "users",
             "user_profiles",
             "account_state",
+            "saved_recipes",
             "control_schema_version",
             "sessions",
             "invitations",

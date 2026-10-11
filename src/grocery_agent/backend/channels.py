@@ -13,6 +13,7 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
+from grocery_agent.account_preferences import apply_shopping_preferences
 from grocery_agent.channel_commands import ChannelAction, parse_channel_command
 from grocery_agent.contracts import Capabilities
 from grocery_agent.localization import Language, channel_help, translate
@@ -240,6 +241,11 @@ class ChannelRepository:
                     # Do not reflect arbitrary input or create an unsolicited reply loop.
                     reply = None
                 elif isinstance(command, RecipeRequest):
+                    from grocery_agent.backend.user_state import UserStateRepository
+
+                    command = apply_shopping_preferences(
+                        command, UserStateRepository(self.control).settings(binding.user_id)
+                    )
                     if "language" not in command.model_fields_set:
                         command = command.model_copy(update={"language": recipe_language})
                     command = validate(command)

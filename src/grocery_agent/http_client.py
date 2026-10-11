@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import Any, Self
+from typing import Any, Literal, Self
 from urllib.parse import quote
 
 import httpx
@@ -15,6 +15,9 @@ from grocery_agent.account_models import (
     PresetUpdate,
     PresetView,
     RevisionInput,
+    SavedRecipeCreate,
+    SavedRecipeDetail,
+    SavedRecipePage,
     SettingsPatch,
     SettingsView,
 )
@@ -33,6 +36,13 @@ class BackendError(RuntimeError):
 
 def job_path(job_id: str, suffix: str = "") -> str:
     return f"/v1/jobs/{quote(job_id, safe='')}{suffix}"
+
+
+def recipe_submit_payload(request: RecipeRequest) -> dict[str, Any]:
+    # Preserve legacy omission (notably the server's cache-policy default),
+    # allowing omitted shopping selections to inherit account preferences.
+    omitted = {"retailer_ids", "max_stores"} - request.model_fields_set
+    return request.model_dump(mode="json", exclude_unset=True, exclude=omitted)
 
 
 def decode(response: httpx.Response) -> Any:
@@ -247,8 +257,36 @@ class GroceryClient:
 
     def put_pantry(self, payload: PantryPut) -> PantryView:
         return PantryView.model_validate(
-            decode(self.http.put("/v1/me/pantry", json=payload.model_dump(mode="json")))
+            decode(
+                self.http.put(
+                    "/v1/me/pantry",
+                    json=payload.model_dump(mode="json", exclude={"condiments"})
+                    | (
+                        {"condiments": list(payload.condiments)}
+                        if "condiments" in payload.model_fields_set
+                        else {}
+                    ),
+                )
+            )
         )
+
+    def saved_recipes(self, *, offset: int = 0, limit: int = 20) -> SavedRecipePage:
+        return SavedRecipePage.model_validate(
+            decode(self.http.get("/v1/me/saved-recipes", params={"offset": offset, "limit": limit}))
+        )
+
+    def save_recipe(self, payload: SavedRecipeCreate) -> SavedRecipeDetail:
+        return SavedRecipeDetail.model_validate(
+            decode(self.http.post("/v1/me/saved-recipes", json=payload.model_dump(mode="json")))
+        )
+
+    def saved_recipe(self, saved_id: str) -> SavedRecipeDetail:
+        return SavedRecipeDetail.model_validate(
+            decode(self.http.get(f"/v1/me/saved-recipes/{quote(saved_id, safe='')}"))
+        )
+
+    def delete_saved_recipe(self, saved_id: str) -> None:
+        decode(self.http.delete(f"/v1/me/saved-recipes/{quote(saved_id, safe='')}"))
 
     def presets(self) -> PresetPage:
         return PresetPage.model_validate(decode(self.http.get("/v1/me/presets")))
@@ -315,7 +353,7 @@ class GroceryClient:
             decode(
                 self.http.post(
                     "/v1/recipes",
-                    json=request.model_dump(mode="json", exclude_unset=True),
+                    json=recipe_submit_payload(request),
                     headers={"Idempotency-Key": idempotency_key or str(request.request_id)},
                 )
             )
@@ -337,6 +375,22 @@ class GroceryClient:
 
     def report(self, job_id: str) -> str:
         response = self.http.get(job_path(job_id, "/report"))
+        if not response.is_success:
+            decode(response)
+        return response.text
+
+    def recipe_export(
+        self,
+        job_id: str,
+        meal_index: int,
+        *,
+        format: Literal["text", "ingredients", "schema-org"] = "text",
+        language: Literal["cs", "en"] = "cs",
+    ) -> str:
+        response = self.http.get(
+            job_path(job_id, f"/recipes/{meal_index}/export"),
+            params={"format": format, "language": language},
+        )
         if not response.is_success:
             decode(response)
         return response.text
@@ -441,8 +495,42 @@ class AsyncGroceryClient:
 
     async def put_pantry(self, payload: PantryPut) -> PantryView:
         return PantryView.model_validate(
-            decode(await self.http.put("/v1/me/pantry", json=payload.model_dump(mode="json")))
+            decode(
+                await self.http.put(
+                    "/v1/me/pantry",
+                    json=payload.model_dump(mode="json", exclude={"condiments"})
+                    | (
+                        {"condiments": list(payload.condiments)}
+                        if "condiments" in payload.model_fields_set
+                        else {}
+                    ),
+                )
+            )
         )
+
+    async def saved_recipes(self, *, offset: int = 0, limit: int = 20) -> SavedRecipePage:
+        return SavedRecipePage.model_validate(
+            decode(
+                await self.http.get(
+                    "/v1/me/saved-recipes", params={"offset": offset, "limit": limit}
+                )
+            )
+        )
+
+    async def save_recipe(self, payload: SavedRecipeCreate) -> SavedRecipeDetail:
+        return SavedRecipeDetail.model_validate(
+            decode(
+                await self.http.post("/v1/me/saved-recipes", json=payload.model_dump(mode="json"))
+            )
+        )
+
+    async def saved_recipe(self, saved_id: str) -> SavedRecipeDetail:
+        return SavedRecipeDetail.model_validate(
+            decode(await self.http.get(f"/v1/me/saved-recipes/{quote(saved_id, safe='')}"))
+        )
+
+    async def delete_saved_recipe(self, saved_id: str) -> None:
+        decode(await self.http.delete(f"/v1/me/saved-recipes/{quote(saved_id, safe='')}"))
 
     async def presets(self) -> PresetPage:
         return PresetPage.model_validate(decode(await self.http.get("/v1/me/presets")))
@@ -515,7 +603,7 @@ class AsyncGroceryClient:
             decode(
                 await self.http.post(
                     "/v1/recipes",
-                    json=request.model_dump(mode="json", exclude_unset=True),
+                    json=recipe_submit_payload(request),
                     headers={"Idempotency-Key": idempotency_key or str(request.request_id)},
                 )
             )
@@ -537,6 +625,22 @@ class AsyncGroceryClient:
 
     async def report(self, job_id: str) -> str:
         response = await self.http.get(job_path(job_id, "/report"))
+        if not response.is_success:
+            decode(response)
+        return response.text
+
+    async def recipe_export(
+        self,
+        job_id: str,
+        meal_index: int,
+        *,
+        format: Literal["text", "ingredients", "schema-org"] = "text",
+        language: Literal["cs", "en"] = "cs",
+    ) -> str:
+        response = await self.http.get(
+            job_path(job_id, f"/recipes/{meal_index}/export"),
+            params={"format": format, "language": language},
+        )
         if not response.is_success:
             decode(response)
         return response.text
